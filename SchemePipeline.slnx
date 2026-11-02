@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/api/">
+    <Project Path="api/SchemePipeline.Api/SchemePipeline.Api.csproj" />
+    <Project Path="api/SchemePipeline.Tests/SchemePipeline.Tests.csproj" />
+  </Folder>
+</Solution>
