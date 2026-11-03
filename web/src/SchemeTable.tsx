@@ -18,9 +18,10 @@ interface Props {
   schemes: Scheme[]
   sort: Sort
   onSort: (key: SortKey) => void
+  onEdit: (scheme: Scheme) => void
 }
 
-export function SchemeTable({ schemes, sort, onSort }: Props) {
+export function SchemeTable({ schemes, sort, onSort, onEdit }: Props) {
   return (
     <div className="table-wrap">
       <table>
@@ -47,7 +48,9 @@ export function SchemeTable({ schemes, sort, onSort }: Props) {
           {schemes.map((scheme) => (
             <tr key={scheme.id}>
               <td>
-                {scheme.name}
+                <button type="button" className="link" onClick={() => onEdit(scheme)}>
+                  {scheme.name}
+                </button>
                 <span className="address">{scheme.siteAddress}</span>
               </td>
               <td>{STATUS_LABELS[scheme.status]}</td>

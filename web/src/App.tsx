@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { api, STATUSES, type Scheme, type SchemeStatus, type SortKey, type Totals } from './api.ts'
+import { api, STATUSES, type Scheme, type SchemeInput, type SchemeStatus, type SortKey, type Totals } from './api.ts'
 import { STATUS_LABELS } from './format.ts'
+import { SchemeForm } from './SchemeForm.tsx'
 import { SchemeTable, type Sort } from './SchemeTable.tsx'
 import { Summary } from './Summary.tsx'
 
@@ -10,6 +11,9 @@ export default function App() {
   const [status, setStatus] = useState<SchemeStatus | null>(null)
   const [sort, setSort] = useState<Sort>({ key: 'status', desc: false })
   const [error, setError] = useState<string | null>(null)
+  const [editing, setEditing] = useState<Scheme | 'new' | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [reloads, setReloads] = useState(0)
 
   useEffect(() => {
     // Aborting on cleanup means a slow, stale response can never overwrite a newer one.
@@ -24,15 +28,34 @@ export default function App() {
         if (!controller.signal.aborted) setError("Couldn't load schemes. Check the API is running, then reload.")
       })
     return () => controller.abort()
-  }, [status, sort])
+  }, [status, sort, reloads])
 
   function changeSort(key: SortKey) {
     setSort((current) => ({ key, desc: current.key === key ? !current.desc : false }))
   }
 
+  function open(target: Scheme | 'new') {
+    setNotice(null)
+    setEditing(target)
+  }
+
+  // Errors propagate to the form, which shows them; only success closes the panel.
+  async function save(input: SchemeInput) {
+    if (editing === 'new') await api.create(input)
+    else if (editing) await api.update(editing.id, input)
+    setEditing(null)
+    setNotice('Scheme saved.')
+    setReloads((n) => n + 1)
+  }
+
   return (
     <main>
-      <h1>Scheme pipeline</h1>
+      <header className="page-header">
+        <h1>Scheme pipeline</h1>
+        <button type="button" className="primary" onClick={() => open('new')}>
+          Add scheme
+        </button>
+      </header>
       {totals && <Summary totals={totals} />}
 
       <div className="toolbar">
@@ -50,6 +73,9 @@ export default function App() {
             ))}
           </select>
         </label>
+        <p className="notice" role="status">
+          {notice}
+        </p>
       </div>
 
       {error ? (
@@ -63,7 +89,16 @@ export default function App() {
           {status ? 'No schemes at this status.' : 'No schemes yet. Add your first scheme to start tracking the pipeline.'}
         </p>
       ) : (
-        <SchemeTable schemes={schemes} sort={sort} onSort={changeSort} />
+        <SchemeTable schemes={schemes} sort={sort} onSort={changeSort} onEdit={open} />
+      )}
+
+      {editing && (
+        <SchemeForm
+          key={editing === 'new' ? 'new' : editing.id}
+          scheme={editing === 'new' ? null : editing}
+          onSave={save}
+          onCancel={() => setEditing(null)}
+        />
       )}
     </main>
   )

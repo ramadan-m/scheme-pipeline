@@ -137,6 +137,155 @@ th button {
   color: var(--ink-soft);
 }
 
+/* Header and buttons */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.page-header h1 {
+  margin: 0;
+}
+
+button {
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+
+button.primary {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+  font-weight: 600;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+button.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+}
+
+button.link:hover {
+  text-decoration-color: var(--ink);
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.notice {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+/* Side panel form */
+.panel {
+  position: fixed;
+  inset: 0 0 0 auto;
+  width: min(440px, 100%);
+  overflow-y: auto;
+  padding: 24px;
+  border-left: 1px solid var(--line);
+  background: #fff;
+  animation: slide-in 150ms ease-out;
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    animation: none;
+  }
+}
+
+.panel h2 {
+  margin: 0 0 16px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.panel label,
+.panel legend {
+  display: block;
+  margin: 16px 0 4px;
+  font-weight: 600;
+}
+
+.panel input,
+.panel select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+}
+
+.panel input[aria-invalid='true'] {
+  border-color: var(--error);
+}
+
+.panel fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.tenure-grid {
+  display: grid;
+  grid-template-columns: 1fr 88px 140px;
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.tenure-row {
+  display: contents;
+}
+
+.tenure-row .field-error {
+  grid-column: 1 / -1;
+}
+
+.column-label {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.field-error {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--error);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 24px;
+}
+
 .message {
   padding: 24px 0;
   color: var(--ink-soft);
