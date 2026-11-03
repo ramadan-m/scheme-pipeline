@@ -26,8 +26,8 @@ public class SchemeValidatorTests
         TenureLine[] expected =
         [
             new(Tenure.SocialRent, 20, 120_000m),
-            new(Tenure.AffordableRent, 0, 0m),
-            new(Tenure.SharedOwnership, 0, 0m),
+            new(Tenure.AffordableRent, 0, null),
+            new(Tenure.SharedOwnership, 0, null),
             new(Tenure.MarketSale, 55, 320_000m),
         ];
         Assert.Equal(expected, scheme.Tenures);
@@ -105,18 +105,20 @@ public class SchemeValidatorTests
         Assert.Equal(valid, !errors.ContainsKey("tenures[0].homes"));
     }
 
-    public static TheoryData<int, decimal, bool> ValueCases => new()
+    public static TheoryData<int, decimal?, bool> ValueCases => new()
     {
         { 1, -1m, false },
+        { 1, 0m, false },     // £0 is a typo now that "unknown" is null
+        { 1, 0.01m, true },
         { 1, 100_000_000m, true },
         { 1, 100_000_000.01m, false },
-        { 1, 0m, false },  // homes but no value
-        { 0, 0m, true },   // no homes, so no value needed
+        { 20, null, true },   // homes known, value not yet: allowed at appraisal
+        { 0, null, true },
     };
 
     [Theory]
     [MemberData(nameof(ValueCases))]
-    public void Average_value_rules(int homes, decimal value, bool valid)
+    public void Average_value_rules(int homes, decimal? value, bool valid)
     {
         var errors = Errors(WithLine(new("MarketSale", homes, value)));
 

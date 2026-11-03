@@ -12,7 +12,8 @@ public static class TenureRules
         tenure is Tenure.SocialRent or Tenure.AffordableRent or Tenure.SharedOwnership;
 }
 
-public record TenureLine(Tenure Tenure, int Homes, decimal AverageValue);
+// AverageValue is null when the homes are not valued yet (common at appraisal).
+public record TenureLine(Tenure Tenure, int Homes, decimal? AverageValue);
 
 public record Scheme
 {

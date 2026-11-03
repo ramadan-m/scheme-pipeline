@@ -34,10 +34,8 @@ public static class SchemeValidator
             if (line.Homes is < 0 or > MaxHomes)
                 errors.TryAdd($"{key}.homes", "Homes must be a whole number from 0 to 100,000.");
 
-            if (line.AverageValue is < 0 or > MaxAverageValue)
-                errors.TryAdd($"{key}.averageValue", "Average value must be from 0 to 100,000,000.");
-            else if (line.Homes > 0 && line.AverageValue == 0)
-                errors.TryAdd($"{key}.averageValue", "Average value is required when there are homes.");
+            if (line.AverageValue is <= 0 or > MaxAverageValue)
+                errors.TryAdd($"{key}.averageValue", "Average value, if given, must be more than 0 and at most 100,000,000.");
         }
 
         if (errors.Count > 0)
@@ -49,7 +47,7 @@ public static class SchemeValidator
             SiteAddress = address,
             Status = status,
             Tenures = Enum.GetValues<Tenure>()
-                .Select(t => lines.TryGetValue(t, out var l) ? l : new TenureLine(t, 0, 0m))
+                .Select(t => lines.TryGetValue(t, out var l) ? l : new TenureLine(t, 0, null))
                 .ToList(),
         };
         return (scheme, new());

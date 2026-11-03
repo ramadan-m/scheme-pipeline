@@ -5,7 +5,7 @@ namespace SchemePipeline.Tests;
 
 public class SchemeMathsTests
 {
-    private static TenureLine Line(Tenure tenure, int homes, decimal averageValue = 100_000m) =>
+    private static TenureLine Line(Tenure tenure, int homes, decimal? averageValue = 100_000m) =>
         new(tenure, homes, averageValue);
 
     private static Scheme SchemeWith(params TenureLine[] lines) => new() { Tenures = [.. lines] };
@@ -23,7 +23,7 @@ public class SchemeMathsTests
     {
         var totals = SchemeMaths.For(WorkedExample);
 
-        Assert.Equal(new Totals(100, 45, 45.0m, 25_400_000m), totals);
+        Assert.Equal(new Totals(100, 45, 45.0m, 25_400_000m, 0), totals);
     }
 
     [Fact]
@@ -32,13 +32,13 @@ public class SchemeMathsTests
         var totals = SchemeMaths.For(
             [Line(SocialRent, 0), Line(AffordableRent, 0), Line(SharedOwnership, 0), Line(MarketSale, 0)]);
 
-        Assert.Equal(new Totals(0, 0, null, 0m), totals);
+        Assert.Equal(new Totals(0, 0, null, 0m, 0), totals);
     }
 
     [Fact]
     public void No_lines_gives_null_percent()
     {
-        Assert.Equal(new Totals(0, 0, null, 0m), SchemeMaths.For([]));
+        Assert.Equal(new Totals(0, 0, null, 0m, 0), SchemeMaths.For([]));
     }
 
     [Fact]
@@ -46,7 +46,7 @@ public class SchemeMathsTests
     {
         var totals = SchemeMaths.For([Line(MarketSale, 30, 300_000m)]);
 
-        Assert.Equal(new Totals(30, 0, 0m, 9_000_000m), totals);
+        Assert.Equal(new Totals(30, 0, 0m, 9_000_000m, 0), totals);
     }
 
     [Fact]
@@ -54,7 +54,7 @@ public class SchemeMathsTests
     {
         var totals = SchemeMaths.For([Line(SocialRent, 10, 100_000m)]);
 
-        Assert.Equal(new Totals(10, 10, 100m, 1_000_000m), totals);
+        Assert.Equal(new Totals(10, 10, 100m, 1_000_000m, 0), totals);
     }
 
     [Theory]
@@ -113,12 +113,46 @@ public class SchemeMathsTests
         var totals = SchemeMaths.ForPortfolio(
             [SchemeWith(WorkedExample), SchemeWith(Line(MarketSale, 30, 300_000m))]);
 
-        Assert.Equal(new Totals(130, 45, 34.6m, 34_400_000m), totals);
+        Assert.Equal(new Totals(130, 45, 34.6m, 34_400_000m, 0), totals);
+    }
+
+    [Fact]
+    public void Unvalued_homes_are_left_out_of_value_but_still_count_as_homes()
+    {
+        var totals = SchemeMaths.For([Line(SocialRent, 20, null), Line(MarketSale, 10, 300_000m)]);
+
+        Assert.Equal(new Totals(30, 20, 66.7m, 3_000_000m, 20), totals);
+    }
+
+    [Fact]
+    public void Zero_homes_with_a_value_adds_nothing()
+    {
+        var totals = SchemeMaths.For([Line(MarketSale, 0, 200_000m)]);
+
+        Assert.Equal(new Totals(0, 0, null, 0m, 0), totals);
+    }
+
+    [Fact]
+    public void Zero_homes_without_a_value_is_not_unvalued()
+    {
+        var totals = SchemeMaths.For([Line(SocialRent, 0, null)]);
+
+        Assert.Equal(0, totals.UnvaluedHomes);
+    }
+
+    [Fact]
+    public void Portfolio_sums_unvalued_homes()
+    {
+        var partlyValued = SchemeWith(Line(SocialRent, 20, null), Line(MarketSale, 10, 300_000m));
+
+        var totals = SchemeMaths.ForPortfolio([partlyValued, SchemeWith(WorkedExample)]);
+
+        Assert.Equal(new Totals(130, 65, 50.0m, 28_400_000m, 20), totals);
     }
 
     [Fact]
     public void Empty_portfolio_gives_null_percent()
     {
-        Assert.Equal(new Totals(0, 0, null, 0m), SchemeMaths.ForPortfolio([]));
+        Assert.Equal(new Totals(0, 0, null, 0m, 0), SchemeMaths.ForPortfolio([]));
     }
 }

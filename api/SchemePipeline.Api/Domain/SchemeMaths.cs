@@ -1,6 +1,6 @@
 namespace SchemePipeline.Api.Domain;
 
-public record Totals(int Homes, int AffordableHomes, decimal? AffordablePercent, decimal Value);
+public record Totals(int Homes, int AffordableHomes, decimal? AffordablePercent, decimal Value, int UnvaluedHomes);
 
 public static class SchemeMaths
 {
@@ -9,13 +9,14 @@ public static class SchemeMaths
         var list = lines.ToList();
         var homes = list.Sum(l => l.Homes);
         var affordable = list.Where(l => l.Tenure.IsAffordable()).Sum(l => l.Homes);
-        var value = list.Sum(l => l.Homes * l.AverageValue);
+        var value = list.Sum(l => l.Homes * (l.AverageValue ?? 0m));
+        var unvalued = list.Where(l => l.AverageValue is null).Sum(l => l.Homes);
 
         decimal? percent = homes == 0
             ? null
             : Math.Round(affordable * 100m / homes, 1, MidpointRounding.AwayFromZero);
 
-        return new Totals(homes, affordable, percent, value);
+        return new Totals(homes, affordable, percent, value, unvalued);
     }
 
     public static Totals ForPortfolio(IEnumerable<Scheme> schemes) =>
