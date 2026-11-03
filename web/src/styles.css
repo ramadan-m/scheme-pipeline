@@ -5,6 +5,82 @@
   --line: #c9d1cf;
   --caution: #9a5b13;
   --error: #b3261e;
+
+  /* Tenure data colours: affordable tenures share a blue-green family; market sale stands apart. */
+  --social-rent: #2f5d8a;
+  --affordable-rent: #4f8fbf;
+  --shared-ownership: #7fb7a4;
+  --market-sale: #c4a35a;
+}
+
+/* Tenure bar and key: the one bold element. */
+[data-tenure='SocialRent'] {
+  --tenure: var(--social-rent);
+}
+
+[data-tenure='AffordableRent'] {
+  --tenure: var(--affordable-rent);
+}
+
+[data-tenure='SharedOwnership'] {
+  --tenure: var(--shared-ownership);
+}
+
+[data-tenure='MarketSale'] {
+  --tenure: var(--market-sale);
+}
+
+.tenure-bar {
+  display: flex;
+  width: 160px;
+  height: 12px;
+  margin-top: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+}
+
+.tenure-bar span,
+.swatch {
+  background: var(--tenure);
+}
+
+/* Hatching = "to be confirmed", borrowed from drawing conventions: these homes have no value yet. */
+.tenure-bar .unvalued,
+.swatch.unvalued {
+  background: repeating-linear-gradient(135deg, var(--tenure) 0 2px, #fff 2px 5px);
+  box-shadow: inset 0 0 0 1px var(--tenure);
+}
+
+.mix-empty {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.tenure-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.tenure-key li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch {
+  width: 14px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.mix-inline {
+  display: none;
 }
 
 * {
@@ -308,5 +384,18 @@ button.link:hover {
   th,
   td {
     padding: 8px 6px;
+  }
+
+  .mix {
+    display: none;
+  }
+
+  .mix-inline {
+    display: block;
+  }
+
+  .mix-inline .tenure-bar {
+    width: 100%;
+    max-width: 160px;
   }
 }

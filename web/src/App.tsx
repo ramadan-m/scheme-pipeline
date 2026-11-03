@@ -4,6 +4,7 @@ import { STATUS_LABELS } from './format.ts'
 import { SchemeForm } from './SchemeForm.tsx'
 import { SchemeTable, type Sort } from './SchemeTable.tsx'
 import { Summary } from './Summary.tsx'
+import { TenureKey } from './TenureBar.tsx'
 
 export default function App() {
   const [schemes, setSchemes] = useState<Scheme[] | null>(null)
@@ -89,7 +90,10 @@ export default function App() {
           {status ? 'No schemes at this status.' : 'No schemes yet. Add your first scheme to start tracking the pipeline.'}
         </p>
       ) : (
-        <SchemeTable schemes={schemes} sort={sort} onSort={changeSort} onEdit={open} />
+        <>
+          <TenureKey />
+          <SchemeTable schemes={schemes} sort={sort} onSort={changeSort} onEdit={open} />
+        </>
       )}
 
       {editing && (

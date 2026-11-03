@@ -1,5 +1,6 @@
 import type { Scheme, SortKey } from './api.ts'
 import { count, percent, STATUS_LABELS, value } from './format.ts'
+import { TenureBar } from './TenureBar.tsx'
 
 export interface Sort {
   key: SortKey
@@ -42,6 +43,7 @@ export function SchemeTable({ schemes, sort, onSort, onEdit }: Props) {
                 </th>
               )
             })}
+            <th className="mix">Tenure mix</th>
           </tr>
         </thead>
         <tbody>
@@ -52,6 +54,11 @@ export function SchemeTable({ schemes, sort, onSort, onEdit }: Props) {
                   {scheme.name}
                 </button>
                 <span className="address">{scheme.siteAddress}</span>
+                {/* Narrow screens hide the mix column and show the bar here instead; display:none
+                    also hides the unused copy from screen readers, so it is never announced twice. */}
+                <div className="mix-inline">
+                  <TenureBar tenures={scheme.tenures} />
+                </div>
               </td>
               <td>{STATUS_LABELS[scheme.status]}</td>
               <td className="num">{count(scheme.totals.homes)}</td>
@@ -61,6 +68,9 @@ export function SchemeTable({ schemes, sort, onSort, onEdit }: Props) {
                 {scheme.totals.unvaluedHomes > 0 && scheme.totals.unvaluedHomes < scheme.totals.homes && (
                   <span className="caution">{count(scheme.totals.unvaluedHomes)} unvalued</span>
                 )}
+              </td>
+              <td className="mix">
+                <TenureBar tenures={scheme.tenures} />
               </td>
             </tr>
           ))}
