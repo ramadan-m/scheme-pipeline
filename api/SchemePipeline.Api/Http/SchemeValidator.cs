@@ -26,6 +26,12 @@ public static class SchemeValidator
             var line = requested[i];
             var key = $"tenures[{i}]";
 
+            if (line is null)
+            {
+                errors.TryAdd(key, "Tenure line must not be empty.");
+                continue;
+            }
+
             if (!TryParseName(line.Tenure, out Tenure tenure))
                 errors.TryAdd($"{key}.tenure", $"Tenure must be one of: {string.Join(", ", Enum.GetNames<Tenure>())}.");
             else if (!lines.TryAdd(tenure, new TenureLine(tenure, line.Homes, line.AverageValue)))

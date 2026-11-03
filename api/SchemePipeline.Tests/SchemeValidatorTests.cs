@@ -80,6 +80,15 @@ public class SchemeValidatorTests
     }
 
     [Fact]
+    public void Null_tenure_line_is_an_error_not_a_crash()
+    {
+        var (scheme, errors) = SchemeValidator.Validate(Valid() with { Tenures = [new("SocialRent", 1, 1m), null] });
+
+        Assert.Null(scheme);
+        Assert.Equal("tenures[1]", Assert.Single(errors.Keys));
+    }
+
+    [Fact]
     public void Unknown_tenure_is_rejected()
     {
         Assert.Contains("tenures[0].tenure", Errors(WithLine(new("FirstHomes", 1, 1m))).Keys);
