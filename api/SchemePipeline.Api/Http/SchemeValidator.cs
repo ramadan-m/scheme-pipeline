@@ -1,0 +1,74 @@
+using SchemePipeline.Api.Domain;
+
+namespace SchemePipeline.Api.Http;
+
+public static class SchemeValidator
+{
+    public const int MaxNameLength = 200;
+    public const int MaxAddressLength = 500;
+    public const int MaxHomes = 100_000;
+    public const decimal MaxAverageValue = 100_000_000m;
+
+    public static (Scheme? Scheme, Dictionary<string, string[]> Errors) Validate(SchemeRequest request)
+    {
+        var errors = new Dictionary<string, string>();
+
+        var name = Required(request.Name, "name", "Name", MaxNameLength, errors);
+        var address = Required(request.SiteAddress, "siteAddress", "Site address", MaxAddressLength, errors);
+
+        if (!TryParseName(request.Status, out SchemeStatus status))
+            errors.TryAdd("status", $"Status must be one of: {string.Join(", ", Enum.GetNames<SchemeStatus>())}.");
+
+        var lines = new Dictionary<Tenure, TenureLine>();
+        var requested = request.Tenures ?? [];
+        for (var i = 0; i < requested.Count; i++)
+        {
+            var line = requested[i];
+            var key = $"tenures[{i}]";
+
+            if (!TryParseName(line.Tenure, out Tenure tenure))
+                errors.TryAdd($"{key}.tenure", $"Tenure must be one of: {string.Join(", ", Enum.GetNames<Tenure>())}.");
+            else if (!lines.TryAdd(tenure, new TenureLine(tenure, line.Homes, line.AverageValue)))
+                errors.TryAdd($"{key}.tenure", $"{tenure} appears more than once.");
+
+            if (line.Homes is < 0 or > MaxHomes)
+                errors.TryAdd($"{key}.homes", "Homes must be a whole number from 0 to 100,000.");
+
+            if (line.AverageValue is < 0 or > MaxAverageValue)
+                errors.TryAdd($"{key}.averageValue", "Average value must be from 0 to 100,000,000.");
+            else if (line.Homes > 0 && line.AverageValue == 0)
+                errors.TryAdd($"{key}.averageValue", "Average value is required when there are homes.");
+        }
+
+        if (errors.Count > 0)
+            return (null, errors.ToDictionary(e => e.Key, e => new[] { e.Value }));
+
+        var scheme = new Scheme
+        {
+            Name = name,
+            SiteAddress = address,
+            Status = status,
+            Tenures = Enum.GetValues<Tenure>()
+                .Select(t => lines.TryGetValue(t, out var l) ? l : new TenureLine(t, 0, 0m))
+                .ToList(),
+        };
+        return (scheme, new());
+    }
+
+    private static string Required(string? value, string key, string label, int maxLength, Dictionary<string, string> errors)
+    {
+        var trimmed = value?.Trim() ?? "";
+        if (trimmed.Length == 0)
+            errors.TryAdd(key, $"{label} is required.");
+        else if (trimmed.Length > maxLength)
+            errors.TryAdd(key, $"{label} must be {maxLength} characters or fewer.");
+        return trimmed;
+    }
+
+    // Enum.TryParse alone would also accept "2" or "99", so only declared names count.
+    private static bool TryParseName<T>(string? value, out T result) where T : struct, Enum
+    {
+        result = default;
+        return value is not null && Enum.GetNames<T>().Contains(value) && Enum.TryParse(value, out result);
+    }
+}
