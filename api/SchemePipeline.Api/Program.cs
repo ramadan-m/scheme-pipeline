@@ -23,15 +23,19 @@ app.UseStatusCodePages();
 await app.Services.GetRequiredService<SchemeStore>().EnsureIndexesAsync();
 
 app.MapSchemeEndpoints();
-app.MapGet("/health", async (IMongoDatabase db, CancellationToken ct) =>
+app.MapGet("/health", async (IMongoDatabase db, ILogger<Program> logger, CancellationToken ct) =>
 {
+    // Without a cap, a down database makes this wait the driver's 30s server-selection timeout.
+    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+    timeout.CancelAfter(TimeSpan.FromSeconds(2));
     try
     {
-        await db.RunCommandAsync<BsonDocument>(new BsonDocument("ping", 1), cancellationToken: ct);
+        await db.RunCommandAsync<BsonDocument>(new BsonDocument("ping", 1), cancellationToken: timeout.Token);
         return Results.Ok(new { status = "ok" });
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        logger.LogWarning(ex, "Health check failed: database ping did not succeed within 2s");
         return Results.Problem(statusCode: 503, title: "Database unavailable");
     }
 });

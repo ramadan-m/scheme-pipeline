@@ -2,7 +2,9 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
+using MongoDB.Bson;
 using MongoDB.Driver;
+using SchemePipeline.Api.Data;
 
 namespace SchemePipeline.Tests;
 
@@ -11,6 +13,7 @@ public class ApiTests : IDisposable
 {
     private readonly WebApplicationFactory<Program> _factory;
     private readonly HttpClient _client;
+    private readonly IMongoDatabase _db;
 
     public ApiTests(MongoFixture mongo)
     {
@@ -19,9 +22,10 @@ public class ApiTests : IDisposable
         {
             DatabaseName = $"api_{Guid.NewGuid():N}",
             AuthenticationSource = "admin",
-        }.ToString();
+        }.ToMongoUrl();
+        _db = mongo.Client.GetDatabase(url.DatabaseName);
         _factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(b => b.UseSetting("ConnectionStrings:Mongo", url));
+            .WithWebHostBuilder(b => b.UseSetting("ConnectionStrings:Mongo", url.ToString()));
         _client = _factory.CreateClient();
     }
 
@@ -199,6 +203,27 @@ public class ApiTests : IDisposable
         Assert.Equal(50.0m, totals.GetProperty("affordablePercent").GetDecimal());
         Assert.Equal(6_000_000m, totals.GetProperty("value").GetDecimal());
         Assert.Equal(20, totals.GetProperty("unvaluedHomes").GetInt32());
+    }
+
+    [Fact]
+    public async Task Unexpected_error_returns_500_problem_details_without_internals()
+    {
+        // A stored document the code can't read (unknown status) is a realistic unexpected failure.
+        await _db.GetCollection<BsonDocument>(SchemeStore.CollectionName).InsertOneAsync(new BsonDocument
+        {
+            { "_id", new BsonBinaryData(Guid.CreateVersion7(), GuidRepresentation.Standard) },
+            { "name", "Corrupt" },
+            { "status", "Bogus" },
+        });
+
+        var response = await _client.GetAsync("/api/schemes");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.DoesNotContain("Bogus", body);
+        Assert.DoesNotContain("Exception", body);
+        Assert.DoesNotContain("SchemePipeline", body);
     }
 
     [Fact]
