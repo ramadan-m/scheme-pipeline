@@ -1,0 +1,74 @@
+# Manual API checks. Run the API (`dotnet run --project api/SchemePipeline.Api`) with Mongo up
+# (`docker compose up -d`), then send requests from VS Code (REST Client) or Visual Studio.
+
+@host = http://localhost:5080
+
+### Health: 200 when Mongo is reachable, 503 within ~2s when it isn't
+GET {{host}}/health
+
+### Create: 201 + Location. 20 social rent homes have no value yet, so totals show unvaluedHomes = 20
+# @name create
+POST {{host}}/api/schemes
+Content-Type: application/json
+
+{
+  "name": "Riverside Phase 1",
+  "siteAddress": "12 Mill Lane, Leeds LS1 4AB",
+  "status": "Appraisal",
+  "tenures": [
+    { "tenure": "SocialRent", "homes": 20, "averageValue": null },
+    { "tenure": "SharedOwnership", "homes": 15, "averageValue": 260000 },
+    { "tenure": "MarketSale", "homes": 55, "averageValue": 320000 }
+  ]
+}
+
+### Get the scheme just created
+GET {{host}}/api/schemes/{{create.response.body.$.id}}
+
+### Update: 200; createdAt stays the same, updatedAt moves
+PUT {{host}}/api/schemes/{{create.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "name": "Riverside Phase 1",
+  "siteAddress": "12 Mill Lane, Leeds LS1 4AB",
+  "status": "Planning",
+  "tenures": [
+    { "tenure": "SocialRent", "homes": 20, "averageValue": 120000 },
+    { "tenure": "SharedOwnership", "homes": 15, "averageValue": 260000 },
+    { "tenure": "MarketSale", "homes": 55, "averageValue": 320000 }
+  ]
+}
+
+### List everything, in pipeline order
+GET {{host}}/api/schemes
+
+### Filter by status and sort by value, highest first (query values are case-insensitive)
+GET {{host}}/api/schemes?status=planning&sort=value&desc=true
+
+### Portfolio summary
+GET {{host}}/api/summary
+
+### Invalid body: 400 with an error for every bad field
+POST {{host}}/api/schemes
+Content-Type: application/json
+
+{
+  "name": " ",
+  "siteAddress": "",
+  "status": "2",
+  "tenures": [
+    { "tenure": "SocialRent", "homes": -1, "averageValue": 0 },
+    { "tenure": "SocialRent", "homes": 1, "averageValue": 100000 },
+    null
+  ]
+}
+
+### Unknown filter value: 400, not an unfiltered list
+GET {{host}}/api/schemes?status=Plannng
+
+### Unknown id: 404
+GET {{host}}/api/schemes/0199e5a2-0000-7000-8000-000000000000
+
+### Malformed id: 404 (the route never matches)
+GET {{host}}/api/schemes/not-a-guid
