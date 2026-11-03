@@ -66,14 +66,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  list(status: SchemeStatus | null, sort: SortKey, desc: boolean) {
+  list(status: SchemeStatus | null, sort: SortKey, desc: boolean, signal?: AbortSignal) {
     const query = new URLSearchParams({ sort, desc: String(desc) })
     if (status) query.set('status', status)
-    return request<Scheme[]>(`/api/schemes?${query}`)
+    return request<Scheme[]>(`/api/schemes?${query}`, { signal })
   },
   create: (input: SchemeInput) =>
     request<Scheme>('/api/schemes', { method: 'POST', body: JSON.stringify(input) }),
   update: (id: string, input: SchemeInput) =>
     request<Scheme>(`/api/schemes/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
-  summary: () => request<Totals>('/api/summary'),
+  summary: (signal?: AbortSignal) => request<Totals>('/api/summary', { signal }),
 }

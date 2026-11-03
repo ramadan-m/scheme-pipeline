@@ -1,0 +1,163 @@
+:root {
+  --paper: #f7f8f6;
+  --ink: #1f2a2e;
+  --ink-soft: #55636a;
+  --line: #c9d1cf;
+  --caution: #9a5b13;
+  --error: #b3261e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 15px/1.5 'IBM Plex Sans', system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+main {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+h1 {
+  margin: 0 0 24px;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+input,
+select,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+select {
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* Summary band: one row of figures, not cards. */
+.summary dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 48px;
+  margin: 0;
+  padding: 16px 0;
+  border-block: 1px solid var(--line);
+}
+
+.summary dt {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.summary dd {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.secondary {
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+
+.caution {
+  display: block;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--caution);
+}
+
+.toolbar {
+  margin: 24px 0 8px;
+}
+
+.toolbar label {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Table */
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+th button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-weight: inherit;
+  cursor: pointer;
+}
+
+.num {
+  text-align: right;
+}
+
+.address {
+  display: block;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.message {
+  padding: 24px 0;
+  color: var(--ink-soft);
+}
+
+.message.error {
+  color: var(--error);
+}
+
+@media (max-width: 720px) {
+  main {
+    padding: 16px;
+  }
+
+  .summary dl {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  th,
+  td {
+    padding: 8px 6px;
+  }
+}

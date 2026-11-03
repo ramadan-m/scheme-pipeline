@@ -1,0 +1,30 @@
+import type { Totals } from './api.ts'
+import { count, percent, value } from './format.ts'
+
+export function Summary({ totals }: { totals: Totals }) {
+  return (
+    <section className="summary" aria-label="Portfolio summary">
+      <dl>
+        <div>
+          <dt>Homes</dt>
+          <dd>{count(totals.homes)}</dd>
+        </div>
+        <div>
+          <dt>Affordable homes</dt>
+          <dd>
+            {count(totals.affordableHomes)} <span className="secondary">{percent(totals.affordablePercent)}</span>
+          </dd>
+        </div>
+        <div>
+          <dt>Total value</dt>
+          <dd>
+            {value(totals)}
+            {totals.unvaluedHomes > 0 && (
+              <span className="caution">excludes {count(totals.unvaluedHomes)} unvalued homes</span>
+            )}
+          </dd>
+        </div>
+      </dl>
+    </section>
+  )
+}
