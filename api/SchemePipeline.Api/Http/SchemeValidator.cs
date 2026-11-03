@@ -69,10 +69,13 @@ public static class SchemeValidator
         return trimmed;
     }
 
-    // Enum.TryParse alone would also accept "2" or "99", so only declared names count.
-    private static bool TryParseName<T>(string? value, out T result) where T : struct, Enum
+    // Enum.TryParse alone would also accept "2", "99" or "Planning, OnSite", so only declared names count.
+    public static bool TryParseName<T>(string? value, out T result, bool ignoreCase = false) where T : struct, Enum
     {
         result = default;
-        return value is not null && Enum.GetNames<T>().Contains(value) && Enum.TryParse(value, out result);
+        var comparer = ignoreCase ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        return value is not null && Enum.GetNames<T>().Contains(value, comparer) && Enum.TryParse(value, ignoreCase, out result);
     }
+
+    public static string OneOf<T>() where T : struct, Enum => string.Join(", ", Enum.GetNames<T>());
 }

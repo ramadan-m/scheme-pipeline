@@ -1,6 +1,39 @@
+using System.Text.Json.Serialization;
+using MongoDB.Bson;
+using MongoDB.Driver;
+using SchemePipeline.Api.Data;
+using SchemePipeline.Api.Http;
+
 var builder = WebApplication.CreateBuilder(args);
+
+var mongoUrl = new MongoUrl(builder.Configuration.GetConnectionString("Mongo")
+    ?? throw new InvalidOperationException("ConnectionStrings:Mongo is not set."));
+
+builder.Services.AddSingleton<IMongoClient>(new MongoClient(mongoUrl));
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IMongoClient>().GetDatabase(mongoUrl.DatabaseName));
+builder.Services.AddSingleton<SchemeStore>();
+builder.Services.AddProblemDetails();
+builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
 var app = builder.Build();
 
-app.MapGet("/", () => "Hello World!");
+app.UseExceptionHandler();
+app.UseStatusCodePages();
+
+await app.Services.GetRequiredService<SchemeStore>().EnsureIndexesAsync();
+
+app.MapSchemeEndpoints();
+app.MapGet("/health", async (IMongoDatabase db, CancellationToken ct) =>
+{
+    try
+    {
+        await db.RunCommandAsync<BsonDocument>(new BsonDocument("ping", 1), cancellationToken: ct);
+        return Results.Ok(new { status = "ok" });
+    }
+    catch (Exception)
+    {
+        return Results.Problem(statusCode: 503, title: "Database unavailable");
+    }
+});
 
 app.Run();
