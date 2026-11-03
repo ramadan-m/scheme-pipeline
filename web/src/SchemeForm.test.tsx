@@ -45,6 +45,31 @@ describe('SchemeForm', () => {
     expect((screen.getByRole('button', { name: 'Save scheme' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
+  it('stops text that is not a number before calling the API, instead of saving it as 0', async () => {
+    const onSave = vi.fn()
+    render(<SchemeForm scheme={null} onSave={onSave} onCancel={() => {}} />)
+
+    await userEvent.type(input('Social rent homes'), '12abc')
+    await userEvent.click(screen.getByRole('button', { name: 'Save scheme' }))
+
+    expect(onSave).not.toHaveBeenCalled()
+    const homes = input('Social rent homes')
+    expect(document.getElementById(homes.getAttribute('aria-describedby')!)?.textContent).toBe(
+      'Enter a number, for example 12.',
+    )
+  })
+
+  it('sends 2.5 homes unchanged so the API can reject it, and accepts "250,000" as a value', async () => {
+    const onSave = vi.fn<(input: SchemeInput) => Promise<void>>().mockResolvedValue()
+    render(<SchemeForm scheme={null} onSave={onSave} onCancel={() => {}} />)
+
+    await userEvent.type(input('Market sale homes'), '2.5')
+    await userEvent.type(input('Market sale average value'), '250,000')
+    await userEvent.click(screen.getByRole('button', { name: 'Save scheme' }))
+
+    expect(onSave.mock.calls[0][0].tenures[3]).toEqual({ tenure: 'MarketSale', homes: 2.5, averageValue: 250000 })
+  })
+
   it('prefills an existing scheme for editing', () => {
     const scheme: Scheme = {
       id: '1',

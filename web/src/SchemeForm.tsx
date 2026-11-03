@@ -35,12 +35,31 @@ function initialRows(scheme: Scheme | null) {
   return rows
 }
 
+// Text -> number, allowing "250,000". Blank gives null; text that isn't a number gives NaN.
+function readNumber(text: string) {
+  const cleaned = text.replaceAll(',', '').trim()
+  return cleaned === '' ? null : Number(cleaned)
+}
+
+// Only checks the text can be read as a number at all; whether the number is acceptable
+// (whole, in range) is the API's rule, so it stays there.
+function unreadableNumbers(rows: Record<Tenure, Row>) {
+  const errors: FieldErrors = {}
+  TENURES.forEach((tenure, i) => {
+    if (Number.isNaN(readNumber(rows[tenure].homes)))
+      errors[`tenures[${i}].homes`] = ['Enter a number, for example 12.']
+    if (Number.isNaN(readNumber(rows[tenure].averageValue)))
+      errors[`tenures[${i}].averageValue`] = ['Enter an amount in pounds, for example 250,000, or leave it blank.']
+  })
+  return errors
+}
+
 // Blank homes means 0; blank value means "not yet known" (null), never 0.
 function toLines(rows: Record<Tenure, Row>) {
   return TENURES.map((tenure) => ({
     tenure,
-    homes: rows[tenure].homes === '' ? 0 : Number(rows[tenure].homes),
-    averageValue: rows[tenure].averageValue === '' ? null : Number(rows[tenure].averageValue),
+    homes: readNumber(rows[tenure].homes) ?? 0,
+    averageValue: readNumber(rows[tenure].averageValue),
   }))
 }
 
@@ -70,9 +89,12 @@ export function SchemeForm({ scheme, onSave, onCancel }: Props) {
 
   async function submit(event: FormEvent) {
     event.preventDefault()
-    setSaving(true)
-    setErrors({})
     setFormError(null)
+    const unreadable = unreadableNumbers(rows)
+    setErrors(unreadable)
+    if (Object.keys(unreadable).length > 0) return
+
+    setSaving(true)
     try {
       await onSave({ name, siteAddress, status, tenures: toLines(rows) })
     } catch (e) {
@@ -131,7 +153,7 @@ export function SchemeForm({ scheme, onSave, onCancel }: Props) {
                 <div className="tenure-row" key={tenure}>
                   <span>{TENURE_LABELS[tenure]}</span>
                   <input
-                    type="number"
+                    type="text"
                     inputMode="numeric"
                     placeholder="0"
                     aria-label={`${TENURE_LABELS[tenure]} homes`}
@@ -141,7 +163,7 @@ export function SchemeForm({ scheme, onSave, onCancel }: Props) {
                     aria-describedby={described(homesKey)}
                   />
                   <input
-                    type="number"
+                    type="text"
                     inputMode="decimal"
                     placeholder="Not yet known"
                     aria-label={`${TENURE_LABELS[tenure]} average value`}

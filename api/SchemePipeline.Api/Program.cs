@@ -17,7 +17,11 @@ builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Ad
 
 var app = builder.Build();
 
-app.UseExceptionHandler();
+// A body that can't be read as JSON (e.g. "homes": "abc") is the client's error: keep its 400, don't report a 500.
+app.UseExceptionHandler(new ExceptionHandlerOptions
+{
+    StatusCodeSelector = ex => ex is BadHttpRequestException bad ? bad.StatusCode : StatusCodes.Status500InternalServerError,
+});
 app.UseStatusCodePages();
 
 await app.Services.GetRequiredService<SchemeStore>().EnsureIndexesAsync();

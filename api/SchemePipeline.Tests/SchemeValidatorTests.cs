@@ -114,6 +114,18 @@ public class SchemeValidatorTests
         Assert.Equal(valid, !errors.ContainsKey("tenures[0].homes"));
     }
 
+    public static TheoryData<decimal> FractionalOrHugeHomes => [2.5m, 0.1m, 1e20m];
+
+    [Theory]
+    [MemberData(nameof(FractionalOrHugeHomes))]
+    public void Homes_must_be_a_whole_number_in_range(decimal homes)
+    {
+        var (scheme, errors) = SchemeValidator.Validate(WithLine(new("MarketSale", homes, 250_000m)));
+
+        Assert.Null(scheme);
+        Assert.Equal("Homes must be a whole number from 0 to 100,000.", errors["tenures[0].homes"][0]);
+    }
+
     public static TheoryData<int, decimal?, bool> ValueCases => new()
     {
         { 1, -1m, false },

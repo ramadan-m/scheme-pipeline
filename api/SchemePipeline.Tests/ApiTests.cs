@@ -98,6 +98,27 @@ public class ApiTests : IDisposable
     }
 
     [Fact]
+    public async Task Fractional_homes_is_a_field_error()
+    {
+        var response = await _client.PostAsJsonAsync("/api/schemes",
+            Body(tenures: [new { tenure = "SocialRent", homes = 2.5m, averageValue = (decimal?)null }]));
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.True(json.GetProperty("errors").TryGetProperty("tenures[0].homes", out _));
+    }
+
+    [Fact]
+    public async Task Unreadable_body_returns_400_not_500()
+    {
+        var response = await _client.PostAsJsonAsync("/api/schemes",
+            Body(tenures: [new { tenure = "SocialRent", homes = "abc", averageValue = (decimal?)null }]));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
     public async Task Null_tenure_line_returns_400_not_500()
     {
         var response = await _client.PostAsJsonAsync("/api/schemes", Body(tenures: [null!]));

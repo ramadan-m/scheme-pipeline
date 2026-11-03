@@ -32,13 +32,15 @@ public static class SchemeValidator
                 continue;
             }
 
+            // Checked before the (int) cast below, so 2.5 or 1e20 become a field error, not a truncation or overflow.
+            var homesValid = line.Homes is >= 0 and <= MaxHomes && line.Homes == decimal.Truncate(line.Homes);
+            if (!homesValid)
+                errors.TryAdd($"{key}.homes", "Homes must be a whole number from 0 to 100,000.");
+
             if (!TryParseName(line.Tenure, out Tenure tenure))
                 errors.TryAdd($"{key}.tenure", $"Tenure must be one of: {string.Join(", ", Enum.GetNames<Tenure>())}.");
-            else if (!lines.TryAdd(tenure, new TenureLine(tenure, line.Homes, line.AverageValue)))
+            else if (!lines.TryAdd(tenure, new TenureLine(tenure, homesValid ? (int)line.Homes : 0, line.AverageValue)))
                 errors.TryAdd($"{key}.tenure", $"{tenure} appears more than once.");
-
-            if (line.Homes is < 0 or > MaxHomes)
-                errors.TryAdd($"{key}.homes", "Homes must be a whole number from 0 to 100,000.");
 
             if (line.AverageValue is <= 0 or > MaxAverageValue)
                 errors.TryAdd($"{key}.averageValue", "Average value, if given, must be more than 0 and at most 100,000,000.");
