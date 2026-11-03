@@ -1,46 +1,49 @@
-// Types mirror the API's JSON contract (see schemes.http).
+import { z } from 'zod'
+
+// Schemas mirror the API's JSON contract (see schemes.http). Types are derived from them,
+// so the shape is written once and also checked at runtime when responses arrive.
 
 export const STATUSES = ['Appraisal', 'Planning', 'OnSite', 'Complete'] as const
-export type SchemeStatus = (typeof STATUSES)[number]
-
 export const TENURES = ['SocialRent', 'AffordableRent', 'SharedOwnership', 'MarketSale'] as const
+
+const TenureLineSchema = z.object({
+  tenure: z.enum(TENURES),
+  homes: z.int().nonnegative(),
+  averageValue: z.number().nullable(),
+})
+
+const TotalsSchema = z.object({
+  homes: z.int().nonnegative(),
+  affordableHomes: z.int().nonnegative(),
+  affordablePercent: z.number().nullable(),
+  value: z.number(),
+  unvaluedHomes: z.int().nonnegative(),
+})
+
+const SchemeSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  siteAddress: z.string(),
+  status: z.enum(STATUSES),
+  tenures: z.array(TenureLineSchema),
+  totals: TotalsSchema,
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+})
+
+// Only the part of a 400 body the form needs: field name -> messages.
+const ValidationProblemSchema = z.object({
+  errors: z.record(z.string(), z.array(z.string())),
+})
+
+export type SchemeStatus = (typeof STATUSES)[number]
 export type Tenure = (typeof TENURES)[number]
-
+export type TenureLine = z.infer<typeof TenureLineSchema>
+export type Totals = z.infer<typeof TotalsSchema>
+export type Scheme = z.infer<typeof SchemeSchema>
+export type SchemeInput = Pick<Scheme, 'name' | 'siteAddress' | 'status' | 'tenures'>
+export type FieldErrors = z.infer<typeof ValidationProblemSchema>['errors']
 export type SortKey = 'status' | 'name' | 'homes' | 'affordable' | 'value'
-
-export interface TenureLine {
-  tenure: Tenure
-  homes: number
-  averageValue: number | null
-}
-
-export interface Totals {
-  homes: number
-  affordableHomes: number
-  affordablePercent: number | null
-  value: number
-  unvaluedHomes: number
-}
-
-export interface Scheme {
-  id: string
-  name: string
-  siteAddress: string
-  status: SchemeStatus
-  tenures: TenureLine[]
-  totals: Totals
-  createdAt: string
-  updatedAt: string
-}
-
-export interface SchemeInput {
-  name: string
-  siteAddress: string
-  status: SchemeStatus
-  tenures: TenureLine[]
-}
-
-export type FieldErrors = Record<string, string[]>
 
 // A 400 from the API, carrying its per-field messages so the form can show them.
 export class ValidationError extends Error {
@@ -52,28 +55,36 @@ export class ValidationError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
     headers: { 'Content-Type': 'application/json', ...init?.headers },
   })
+  const body: unknown = await response.json().catch(() => null)
+
   if (response.status === 400) {
-    const body = await response.json()
-    if (body.errors) throw new ValidationError(body.errors)
+    const problem = ValidationProblemSchema.safeParse(body)
+    if (problem.success) throw new ValidationError(problem.data.errors)
   }
   if (!response.ok) throw new Error(`The server returned HTTP ${response.status}.`)
-  return response.json() as Promise<T>
+
+  const parsed = schema.safeParse(body)
+  if (!parsed.success) {
+    console.error(`Unexpected response from ${path}:\n${z.prettifyError(parsed.error)}`)
+    throw new Error('The server sent a response this page does not understand.')
+  }
+  return parsed.data
 }
 
 export const api = {
   list(status: SchemeStatus | null, sort: SortKey, desc: boolean, signal?: AbortSignal) {
     const query = new URLSearchParams({ sort, desc: String(desc) })
     if (status) query.set('status', status)
-    return request<Scheme[]>(`/api/schemes?${query}`, { signal })
+    return request(`/api/schemes?${query}`, z.array(SchemeSchema), { signal })
   },
   create: (input: SchemeInput) =>
-    request<Scheme>('/api/schemes', { method: 'POST', body: JSON.stringify(input) }),
+    request('/api/schemes', SchemeSchema, { method: 'POST', body: JSON.stringify(input) }),
   update: (id: string, input: SchemeInput) =>
-    request<Scheme>(`/api/schemes/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
-  summary: (signal?: AbortSignal) => request<Totals>('/api/summary', { signal }),
+    request(`/api/schemes/${id}`, SchemeSchema, { method: 'PUT', body: JSON.stringify(input) }),
+  summary: (signal?: AbortSignal) => request('/api/summary', TotalsSchema, { signal }),
 }
