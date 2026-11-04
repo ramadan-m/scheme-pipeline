@@ -60,7 +60,10 @@ describe('SchemeForm', () => {
   })
 
   // JSON turns Infinity into null, which the API reads as "not valued": a valuation would vanish silently.
-  it.each(['Infinity', '-Infinity', '1e309'])('stops "%s" before calling the API', async (text) => {
+  // Hex and exponent forms would save a different number than the user meant, and numbers too big
+  // for JavaScript to hold exactly can't be sent faithfully (the API also can't read 1e30).
+  it.each(['Infinity', '-Infinity', '1e309', '0x10', '1e5', '1e30', '99999999999999999999'])(
+    'stops "%s" before calling the API', async (text) => {
     const onSave = vi.fn()
     render(<SchemeForm scheme={null} saving={false} onSave={onSave} onCancel={() => {}} />)
 

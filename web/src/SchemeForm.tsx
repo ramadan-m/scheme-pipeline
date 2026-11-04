@@ -36,17 +36,19 @@ function initialRows(scheme: Scheme | null) {
   return rows
 }
 
-// Text -> number, allowing "250,000". Blank gives null; text that isn't a number gives NaN.
+// Text -> number, allowing "250,000". Blank gives null; anything but a plain decimal gives NaN,
+// because Number() would also read "0x10" as 16 and "1e5" as 100000.
 function readNumber(text: string) {
   const cleaned = text.replaceAll(',', '').trim()
-  return cleaned === '' ? null : Number(cleaned)
+  if (cleaned === '') return null
+  return /^-?(\d+(\.\d*)?|\.\d+)$/.test(cleaned) ? Number(cleaned) : NaN
 }
 
-// Blank is fine; anything else must be a finite number. Infinity would reach the API as null
-// (JSON has no Infinity), which for a value means "not valued" and would erase it silently.
+// Blank is fine; anything else must be a plain number JavaScript holds exactly. Bigger numbers
+// can't be sent faithfully (and 1e309 would become Infinity, which JSON sends as null = "not valued").
 const unreadable = (text: string) => {
   const n = readNumber(text)
-  return n !== null && !Number.isFinite(n)
+  return n !== null && !(Math.abs(n) <= Number.MAX_SAFE_INTEGER)
 }
 
 // Only checks the text can be read as a number at all; whether the number is acceptable
@@ -97,9 +99,9 @@ export function SchemeForm({ scheme, saving, onSave, onCancel }: Props) {
   async function submit(event: FormEvent) {
     event.preventDefault()
     setFormError(null)
-    const unreadable = unreadableNumbers(rows)
-    setErrors(unreadable)
-    if (Object.keys(unreadable).length > 0) return
+    const numberErrors = unreadableNumbers(rows)
+    setErrors(numberErrors)
+    if (Object.keys(numberErrors).length > 0) return
 
     try {
       await onSave({ name, siteAddress, status, tenures: toLines(rows) })
