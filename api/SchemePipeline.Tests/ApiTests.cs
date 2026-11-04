@@ -258,4 +258,20 @@ public class ApiTests : IDisposable
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
+
+    [Fact]
+    public async Task Startup_creates_the_status_index_in_the_background()
+    {
+        var indexes = _db.GetCollection<BsonDocument>(SchemeStore.CollectionName).Indexes;
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+
+        // The client is created in the constructor, so the host has started; the index follows shortly.
+        while (true)
+        {
+            var keys = (await (await indexes.ListAsync()).ToListAsync()).Select(i => i["key"].AsBsonDocument);
+            if (keys.Contains(new BsonDocument("status", 1))) return;
+            Assert.True(DateTime.UtcNow < deadline, "The status index was not created within 10s of startup.");
+            await Task.Delay(100);
+        }
+    }
 }

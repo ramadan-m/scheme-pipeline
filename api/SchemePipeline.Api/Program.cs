@@ -12,6 +12,10 @@ var mongoUrl = new MongoUrl(builder.Configuration.GetConnectionString("Mongo")
 builder.Services.AddSingleton<IMongoClient>(new MongoClient(mongoUrl));
 builder.Services.AddSingleton(sp => sp.GetRequiredService<IMongoClient>().GetDatabase(mongoUrl.DatabaseName));
 builder.Services.AddSingleton<SchemeStore>();
+builder.Services.AddHostedService(sp => new IndexInitializer(
+    sp.GetRequiredService<SchemeStore>().EnsureIndexesAsync,
+    sp.GetRequiredService<ILogger<IndexInitializer>>(),
+    retryDelay: TimeSpan.FromSeconds(5)));
 builder.Services.AddProblemDetails();
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
@@ -23,8 +27,6 @@ app.UseExceptionHandler(new ExceptionHandlerOptions
     StatusCodeSelector = ex => ex is BadHttpRequestException bad ? bad.StatusCode : StatusCodes.Status500InternalServerError,
 });
 app.UseStatusCodePages();
-
-await app.Services.GetRequiredService<SchemeStore>().EnsureIndexesAsync();
 
 app.MapSchemeEndpoints();
 app.MapGet("/health", async (IMongoDatabase db, ILogger<Program> logger, CancellationToken ct) =>
