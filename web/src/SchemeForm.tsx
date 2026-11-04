@@ -19,6 +19,7 @@ interface Row {
 
 interface Props {
   scheme: Scheme | null
+  saving: boolean
   onSave: (input: SchemeInput) => Promise<void>
   onCancel: () => void
 }
@@ -71,14 +72,13 @@ function FieldError({ id, message }: { id: string; message?: string }) {
   ) : null
 }
 
-export function SchemeForm({ scheme, onSave, onCancel }: Props) {
+export function SchemeForm({ scheme, saving, onSave, onCancel }: Props) {
   const [name, setName] = useState(scheme?.name ?? '')
   const [siteAddress, setSiteAddress] = useState(scheme?.siteAddress ?? '')
   const [status, setStatus] = useState<SchemeStatus>(scheme?.status ?? 'Appraisal')
   const [rows, setRows] = useState(() => initialRows(scheme))
   const [errors, setErrors] = useState<FieldErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
 
   const error = (key: string) => errors[key]?.[0]
   const described = (key: string) => (error(key) ? `${key}-error` : undefined)
@@ -94,13 +94,11 @@ export function SchemeForm({ scheme, onSave, onCancel }: Props) {
     setErrors(unreadable)
     if (Object.keys(unreadable).length > 0) return
 
-    setSaving(true)
     try {
       await onSave({ name, siteAddress, status, tenures: toLines(rows) })
     } catch (e) {
       if (e instanceof ValidationError) setErrors(e.errors)
       else setFormError("Couldn't save the scheme. Check the API is running, then try again.")
-      setSaving(false)
     }
   }
 
@@ -190,7 +188,7 @@ export function SchemeForm({ scheme, onSave, onCancel }: Props) {
           <button type="submit" className="primary" disabled={saving}>
             {saving ? 'Saving…' : 'Save scheme'}
           </button>
-          <button type="button" onClick={onCancel}>
+          <button type="button" onClick={onCancel} disabled={saving}>
             Cancel
           </button>
         </div>

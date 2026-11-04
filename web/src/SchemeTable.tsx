@@ -20,9 +20,10 @@ interface Props {
   sort: Sort
   onSort: (key: SortKey) => void
   onEdit: (scheme: Scheme) => void
+  editLocked: boolean
 }
 
-export function SchemeTable({ schemes, sort, onSort, onEdit }: Props) {
+export function SchemeTable({ schemes, sort, onSort, onEdit, editLocked }: Props) {
   return (
     <div className="table-wrap">
       <table>
@@ -50,7 +51,7 @@ export function SchemeTable({ schemes, sort, onSort, onEdit }: Props) {
           {schemes.map((scheme) => (
             <tr key={scheme.id}>
               <td>
-                <button type="button" className="link" onClick={() => onEdit(scheme)}>
+                <button type="button" className="link" onClick={() => onEdit(scheme)} disabled={editLocked}>
                   {scheme.name}
                 </button>
                 <span className="address">{scheme.siteAddress}</span>

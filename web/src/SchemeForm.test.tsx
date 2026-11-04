@@ -12,7 +12,7 @@ const input = (label: string) => screen.getByLabelText(label) as HTMLInputElemen
 describe('SchemeForm', () => {
   it('sends a blank average value as null (not yet known) and blank homes as 0', async () => {
     const onSave = vi.fn<(input: SchemeInput) => Promise<void>>().mockResolvedValue()
-    render(<SchemeForm scheme={null} onSave={onSave} onCancel={() => {}} />)
+    render(<SchemeForm scheme={null} saving={false} onSave={onSave} onCancel={() => {}} />)
 
     await userEvent.type(input('Name'), 'Orchard Fields')
     await userEvent.type(input('Site address'), 'Hollow Lane')
@@ -31,7 +31,7 @@ describe('SchemeForm', () => {
         'tenures[2].averageValue': ['Average value, if given, must be more than 0 and at most 100,000,000.'],
       }),
     )
-    render(<SchemeForm scheme={null} onSave={onSave} onCancel={() => {}} />)
+    render(<SchemeForm scheme={null} saving={false} onSave={onSave} onCancel={() => {}} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Save scheme' }))
 
@@ -47,7 +47,7 @@ describe('SchemeForm', () => {
 
   it('stops text that is not a number before calling the API, instead of saving it as 0', async () => {
     const onSave = vi.fn()
-    render(<SchemeForm scheme={null} onSave={onSave} onCancel={() => {}} />)
+    render(<SchemeForm scheme={null} saving={false} onSave={onSave} onCancel={() => {}} />)
 
     await userEvent.type(input('Social rent homes'), '12abc')
     await userEvent.click(screen.getByRole('button', { name: 'Save scheme' }))
@@ -61,7 +61,7 @@ describe('SchemeForm', () => {
 
   it('sends 2.5 homes unchanged so the API can reject it, and accepts "250,000" as a value', async () => {
     const onSave = vi.fn<(input: SchemeInput) => Promise<void>>().mockResolvedValue()
-    render(<SchemeForm scheme={null} onSave={onSave} onCancel={() => {}} />)
+    render(<SchemeForm scheme={null} saving={false} onSave={onSave} onCancel={() => {}} />)
 
     await userEvent.type(input('Market sale homes'), '2.5')
     await userEvent.type(input('Market sale average value'), '250,000')
@@ -86,7 +86,7 @@ describe('SchemeForm', () => {
       createdAt: '',
       updatedAt: '',
     }
-    render(<SchemeForm scheme={scheme} onSave={vi.fn()} onCancel={() => {}} />)
+    render(<SchemeForm scheme={scheme} saving={false} onSave={vi.fn()} onCancel={() => {}} />)
 
     expect(screen.getByRole('heading', { name: 'Edit scheme' })).toBeTruthy()
     expect(input('Name').value).toBe('Canal Wharf')

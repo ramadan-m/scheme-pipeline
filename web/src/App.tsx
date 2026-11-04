@@ -15,6 +15,7 @@ export default function App() {
   const [editing, setEditing] = useState<Scheme | 'new' | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [reloads, setReloads] = useState(0)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     // Aborting on cleanup means a slow, stale response can never overwrite a newer one.
@@ -40,10 +41,17 @@ export default function App() {
     setEditing(target)
   }
 
-  // Errors propagate to the form, which shows them; only success closes the panel.
+  // The panel is locked while saving: otherwise a late response could close a different form,
+  // and a late error would go to a form that is no longer on screen.
   async function save(input: SchemeInput) {
-    if (editing === 'new') await api.create(input)
-    else if (editing) await api.update(editing.id, input)
+    setSaving(true)
+    try {
+      if (editing === 'new') await api.create(input)
+      else if (editing) await api.update(editing.id, input)
+    } finally {
+      setSaving(false)
+    }
+    // Errors propagate to the form, which shows them; only success closes the panel.
     setEditing(null)
     setNotice('Scheme saved.')
     setReloads((n) => n + 1)
@@ -53,7 +61,7 @@ export default function App() {
     <main>
       <header className="page-header">
         <h1>Scheme pipeline</h1>
-        <button type="button" className="primary" onClick={() => open('new')}>
+        <button type="button" className="primary" onClick={() => open('new')} disabled={saving}>
           Add scheme
         </button>
       </header>
@@ -92,7 +100,7 @@ export default function App() {
       ) : (
         <>
           <TenureKey />
-          <SchemeTable schemes={schemes} sort={sort} onSort={changeSort} onEdit={open} />
+          <SchemeTable schemes={schemes} sort={sort} onSort={changeSort} onEdit={open} editLocked={saving} />
         </>
       )}
 
@@ -100,8 +108,9 @@ export default function App() {
         <SchemeForm
           key={editing === 'new' ? 'new' : editing.id}
           scheme={editing === 'new' ? null : editing}
+          saving={saving}
           onSave={save}
-          onCancel={() => setEditing(null)}
+          onCancel={() => !saving && setEditing(null)}
         />
       )}
     </main>
