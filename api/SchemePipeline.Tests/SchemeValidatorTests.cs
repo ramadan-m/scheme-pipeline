@@ -79,6 +79,16 @@ public class SchemeValidatorTests
         Assert.Equal(valid, !errors.ContainsKey("name"));
     }
 
+    [Theory]
+    [InlineData(500, true)]
+    [InlineData(501, false)]
+    public void Site_address_length_limit(int length, bool valid)
+    {
+        var errors = Errors(Valid() with { SiteAddress = new string('a', length) });
+
+        Assert.Equal(valid, !errors.ContainsKey("siteAddress"));
+    }
+
     [Fact]
     public void Null_tenure_line_is_an_error_not_a_crash()
     {

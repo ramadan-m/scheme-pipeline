@@ -32,10 +32,11 @@ public class ApiTests : IDisposable
     public void Dispose() => _factory.Dispose();
 
     // 20 social rent with no value yet + 10 market sale at £300k.
-    private static object Body(string name = "Riverside", string status = "Planning", object[]? tenures = null) => new
+    private static object Body(
+        string name = "Riverside", string status = "Planning", object[]? tenures = null, string siteAddress = "12 Mill Lane") => new
     {
         name,
-        siteAddress = "12 Mill Lane",
+        siteAddress,
         status,
         tenures = tenures ??
         [
@@ -174,12 +175,15 @@ public class ApiTests : IDisposable
         var created = await Create(Body());
         var id = created.GetProperty("id").GetGuid();
 
-        var response = await _client.PutAsJsonAsync($"/api/schemes/{id}", Body(name: "Riverside 2", status: "OnSite"));
+        var response = await _client.PutAsJsonAsync(
+            $"/api/schemes/{id}", Body(name: "Riverside 2", status: "OnSite", siteAddress: "99 New Road"));
         var updated = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var stored = await _client.GetFromJsonAsync<JsonElement>($"/api/schemes/{id}");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("Riverside 2", updated.GetProperty("name").GetString());
         Assert.Equal("OnSite", updated.GetProperty("status").GetString());
+        Assert.Equal("99 New Road", stored.GetProperty("siteAddress").GetString());
         Assert.Equal(created.GetProperty("createdAt").GetDateTime(), updated.GetProperty("createdAt").GetDateTime());
     }
 

@@ -67,13 +67,32 @@ public class SchemeStoreTests(MongoFixture mongo)
         var added = await Store().AddAsync(Riverside());
         await Task.Delay(5);
 
-        var updated = await Store().UpdateAsync(added.Id, Riverside(SchemeStatus.Complete) with { Name = "Riverside 2" });
+        var updated = await Store().UpdateAsync(added.Id, Riverside(SchemeStatus.Complete) with
+        {
+            Name = "Riverside 2",
+            SiteAddress = "99 New Road",
+            Tenures = [new(Tenure.MarketSale, 7, 250_000m)],
+        });
+        var reloaded = await Store().GetAsync(added.Id);
 
         Assert.NotNull(updated);
         Assert.Equal("Riverside 2", updated.Name);
         Assert.Equal(SchemeStatus.Complete, updated.Status);
         Assert.Equal(added.CreatedAt, updated.CreatedAt);
         Assert.True(updated.UpdatedAt > added.UpdatedAt);
+        // Every editable field must be persisted, not just echoed back.
+        Assert.Equal("99 New Road", reloaded!.SiteAddress);
+        Assert.Equal([new TenureLine(Tenure.MarketSale, 7, 250_000m)], reloaded.Tenures);
+    }
+
+    [Fact]
+    public async Task Ensure_indexes_creates_the_status_index()
+    {
+        await Store().EnsureIndexesAsync();
+
+        var indexes = await (await _db.GetCollection<BsonDocument>(SchemeStore.CollectionName).Indexes.ListAsync()).ToListAsync();
+
+        Assert.Contains(new BsonDocument("status", 1), indexes.Select(index => index["key"].AsBsonDocument));
     }
 
     [Fact]
