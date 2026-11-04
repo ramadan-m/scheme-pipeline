@@ -256,7 +256,7 @@ button.link {
   text-underline-offset: 3px;
 }
 
-button.link:hover {
+button.link:hover:not(:disabled) {
   text-decoration-color: var(--ink);
 }
 
