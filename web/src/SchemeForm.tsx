@@ -42,14 +42,21 @@ function readNumber(text: string) {
   return cleaned === '' ? null : Number(cleaned)
 }
 
+// Blank is fine; anything else must be a finite number. Infinity would reach the API as null
+// (JSON has no Infinity), which for a value means "not valued" and would erase it silently.
+const unreadable = (text: string) => {
+  const n = readNumber(text)
+  return n !== null && !Number.isFinite(n)
+}
+
 // Only checks the text can be read as a number at all; whether the number is acceptable
 // (whole, in range) is the API's rule, so it stays there.
 function unreadableNumbers(rows: Record<Tenure, Row>) {
   const errors: FieldErrors = {}
   TENURES.forEach((tenure, i) => {
-    if (Number.isNaN(readNumber(rows[tenure].homes)))
+    if (unreadable(rows[tenure].homes))
       errors[`tenures[${i}].homes`] = ['Enter a number, for example 12.']
-    if (Number.isNaN(readNumber(rows[tenure].averageValue)))
+    if (unreadable(rows[tenure].averageValue))
       errors[`tenures[${i}].averageValue`] = ['Enter an amount in pounds, for example 250,000, or leave it blank.']
   })
   return errors

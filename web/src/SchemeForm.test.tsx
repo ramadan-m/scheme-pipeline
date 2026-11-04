@@ -59,6 +59,20 @@ describe('SchemeForm', () => {
     )
   })
 
+  // JSON turns Infinity into null, which the API reads as "not valued": a valuation would vanish silently.
+  it.each(['Infinity', '-Infinity', '1e309'])('stops "%s" before calling the API', async (text) => {
+    const onSave = vi.fn()
+    render(<SchemeForm scheme={null} saving={false} onSave={onSave} onCancel={() => {}} />)
+
+    await userEvent.type(input('Market sale homes'), text)
+    await userEvent.type(input('Market sale average value'), text)
+    await userEvent.click(screen.getByRole('button', { name: 'Save scheme' }))
+
+    expect(onSave).not.toHaveBeenCalled()
+    for (const label of ['Market sale homes', 'Market sale average value'])
+      expect(input(label).getAttribute('aria-invalid')).toBe('true')
+  })
+
   it('sends 2.5 homes unchanged so the API can reject it, and accepts "250,000" as a value', async () => {
     const onSave = vi.fn<(input: SchemeInput) => Promise<void>>().mockResolvedValue()
     render(<SchemeForm scheme={null} saving={false} onSave={onSave} onCancel={() => {}} />)
