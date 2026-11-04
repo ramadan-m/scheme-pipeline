@@ -35,8 +35,9 @@ if %tries% gtr 90 (
   exit /b 1
 )
 timeout /t 1 /nobreak >nul
-curl -s -o nul http://localhost:5080/health || goto wait
-curl -s -o nul http://localhost:5173 || goto wait
+rem -f: an HTTP error (e.g. 503 when the database is down) counts as not ready.
+curl -s -f -o nul http://localhost:5080/health || goto wait
+curl -s -f -o nul http://localhost:5173 || goto wait
 
 start "" http://localhost:5173
 echo Running: web http://localhost:5173  API http://localhost:5080

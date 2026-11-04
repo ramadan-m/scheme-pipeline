@@ -1,3 +1,6 @@
+# Fixed name so the container is found however the repo folder is named (the e2e reset relies on it).
+name: scheme-pipeline
+
 services:
   mongo:
     image: mongo:8.0
