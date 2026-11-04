@@ -76,15 +76,23 @@ async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit
   return parsed.data
 }
 
+// Like AbortSignal.timeout(15_000), but built on setTimeout so tests can run the clock forward.
+function saveTimeout() {
+  const controller = new AbortController()
+  setTimeout(() => controller.abort(new DOMException('The save timed out.', 'TimeoutError')), 15_000)
+  return controller.signal
+}
+
 export const api = {
   list(status: SchemeStatus | null, sort: SortKey, desc: boolean, signal?: AbortSignal) {
     const query = new URLSearchParams({ sort, desc: String(desc) })
     if (status) query.set('status', status)
     return request(`/api/schemes?${query}`, z.array(SchemeSchema), { signal })
   },
+  // The edit panel is locked while saving, so a hung API must not keep it locked forever.
   create: (input: SchemeInput) =>
-    request('/api/schemes', SchemeSchema, { method: 'POST', body: JSON.stringify(input) }),
+    request('/api/schemes', SchemeSchema, { method: 'POST', body: JSON.stringify(input), signal: saveTimeout() }),
   update: (id: string, input: SchemeInput) =>
-    request(`/api/schemes/${id}`, SchemeSchema, { method: 'PUT', body: JSON.stringify(input) }),
+    request(`/api/schemes/${id}`, SchemeSchema, { method: 'PUT', body: JSON.stringify(input), signal: saveTimeout() }),
   summary: (signal?: AbortSignal) => request('/api/summary', TotalsSchema, { signal }),
 }

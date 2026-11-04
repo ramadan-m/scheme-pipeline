@@ -107,6 +107,9 @@ export function SchemeForm({ scheme, saving, onSave, onCancel }: Props) {
       await onSave({ name, siteAddress, status, tenures: toLines(rows) })
     } catch (e) {
       if (e instanceof ValidationError) setErrors(e.errors)
+      // The request may have reached the database before the timeout, so a blind retry could duplicate it.
+      else if (e instanceof DOMException && e.name === 'TimeoutError')
+        setFormError('The save took too long. It may still have gone through: reload the page to check before trying again.')
       else setFormError("Couldn't save the scheme. Check the API is running, then try again.")
     }
   }

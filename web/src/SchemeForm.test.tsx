@@ -45,6 +45,18 @@ describe('SchemeForm', () => {
     expect((screen.getByRole('button', { name: 'Save scheme' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
+  // A save that timed out may still have reached the database, so a blind retry could add a duplicate.
+  it('says a timed-out save may have gone through', async () => {
+    const onSave = vi.fn().mockRejectedValue(new DOMException('The operation timed out.', 'TimeoutError'))
+    render(<SchemeForm scheme={null} saving={false} onSave={onSave} onCancel={() => {}} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save scheme' }))
+
+    expect(screen.getByRole('alert').textContent).toBe(
+      'The save took too long. It may still have gone through: reload the page to check before trying again.',
+    )
+  })
+
   it('stops text that is not a number before calling the API, instead of saving it as 0', async () => {
     const onSave = vi.fn()
     render(<SchemeForm scheme={null} saving={false} onSave={onSave} onCancel={() => {}} />)

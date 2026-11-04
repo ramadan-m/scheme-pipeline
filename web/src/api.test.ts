@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { api, ValidationError } from './api.ts'
+import { api, ValidationError, type SchemeInput } from './api.ts'
 
 const respond = (status: number, body: unknown) =>
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status })))
@@ -65,5 +65,29 @@ describe('api responses are validated at the boundary', () => {
     respond(400, { title: 'Bad Request' })
 
     await expect(api.summary()).rejects.not.toBeInstanceOf(ValidationError)
+  })
+})
+
+describe('saving', () => {
+  afterEach(() => vi.useRealTimers())
+
+  const input: SchemeInput = { name: 'Riverside', siteAddress: '12 Mill Lane', status: 'Planning', tenures: [] }
+
+  // A hung API must not leave the edit panel locked forever: the save gives up after 15 s.
+  it.each([
+    ['create', () => api.create(input)],
+    ['update', () => api.update('019a4f2c-7c3a-7b4e-9a1d-2f3e4d5c6b7a', input)],
+  ])('%s gives up after 15 seconds', async (_, save) => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', vi.fn((_path: string, init: RequestInit) =>
+      new Promise((_resolve, reject) => init.signal?.addEventListener('abort', () => reject(init.signal!.reason)))))
+
+    let outcome: unknown = 'pending'
+    save().catch((e: unknown) => (outcome = e))
+
+    await vi.advanceTimersByTimeAsync(14_999)
+    expect(outcome).toBe('pending')
+    await vi.advanceTimersByTimeAsync(1)
+    expect((outcome as Error).name).toBe('TimeoutError')
   })
 })
