@@ -1,0 +1,271 @@
+Ran list project files
+Ran run dotnet tests
+Analyzed Scheme.cs:L1-27
+Analyzed SchemeMaths.cs:L1-24
+Checked task Run dotnet tests
+Analyzed SchemeSorting.cs:L1-22
+Analyzed package.json:L1-37
+Canceled run npm test in web
+Killed task Run npm test in web
+Ran run web unit tests · Exited with code 1
+Ran check node_modules
+Analyzed start.bat:L1-42
+Ran install web dependencies
+Ran run web unit tests
+Ran lint and build web
+Analyzed Program.cs:L1-47
+Analyzed appsettings.json:L1-12
+Analyzed SchemePipeline.Api.csproj:L1-13
+Analyzed launchSettings.json:L1-12
+Analyzed vite.config.ts:L1-16
+Analyzed SchemeStore.cs:L1-72
+Analyzed Contracts.cs:L1-16
+Analyzed SchemeEndpoints.cs:L1-73
+Analyzed SchemeValidator.cs:L1-83
+Analyzed SchemeValidatorTests.cs:L1-148
+Analyzed SchemeMathsTests.cs:L1-158
+Analyzed SchemeSortingTests.cs:L1-65
+Analyzed MongoFixture.cs:L1-30
+Analyzed SchemeStoreTests.cs:L1-100
+Analyzed ApiTests.cs:L1-257
+Analyzed api.ts:L1-90
+Analyzed App.tsx:L1-109
+Analyzed SchemeForm.tsx:L1-200
+Analyzed SchemeTable.tsx:L1-81
+Analyzed Summary.tsx:L1-30
+Analyzed TenureBar.tsx:L1-43
+Analyzed format.ts:L1-33
+Analyzed journey.e2e.ts:L1-63
+Analyzed reset-database.ts:L1-9
+Analyzed playwright.config.ts:L1-25
+Analyzed docker-compose.yml:L1-10
+Analyzed schemes.http:L1-74
+Analyzed styles.css:L1-100
+Analyzed styles.css:L101-300
+Analyzed styles.css:L301-401
+Analyzed api.test.ts:L1-39
+Analyzed format.test.ts:L1-46
+Analyzed SchemeForm.test.tsx:L1-97
+Analyzed TenureBar.test.tsx:L1-49
+Analyzed global.json:L1-6
+Analyzed .oxlintrc.json:L1-8
+Analyzed SchemePipeline.slnx:L1-6
+Analyzed .gitignore:L1-8
+Ran check dotnet version
+Analyzed index.html:L1-12
+Analyzed main.tsx:L1-12
+Analyzed tsconfig.json:L1-7
+Analyzed tsconfig.app.json:L1-27
+Analyzed tsconfig.node.json:L1-23
+Ran check tsc
+Ran lint e2e folder
+Ran git status
+Ran git log
+Ran full git log
+Ran check docker ps
+Ran run playwright tests · Exited with code 1
+Ran docker compose ps in project directory
+Analyzed .gitattributes:L1
+
+# Code & Architecture Review: Scheme Pipeline
+
+A comprehensive review of the `scheme-pipeline-v1-review` codebase was conducted, covering the .NET 10 Minimal API backend, React 19 / Vite frontend, domain logic, data persistence in MongoDB, and the testing / CI automation stack.
+
+---
+
+### Key Strengths & Architecture Highlights
+* **Clean Domain Modeling:** Clear domain records ([`Scheme`](file:///C:/Projects/scheme-pipeline-v1-review/api/SchemePipeline.Api/Domain/Scheme.cs), [`Totals`](file:///C:/Projects/scheme-pipeline-v1-review/api/SchemePipeline.Api/Domain/SchemeMaths.cs#L3), [`TenureRules`](file:///C:/Projects/scheme-pipeline-v1-review/api/SchemePipeline.Api/Domain/Scheme.cs#L8-L13)) with pure calculation functions in [`SchemeMaths.cs`](file:///C:/Projects/scheme-pipeline-v1-review/api/SchemePipeline.Api/Domain/SchemeMaths.cs).
+* **Strong Test Coverage:** 75 passing backend tests ([`SchemePipeline.Tests`](file:///C:/Projects/scheme-pipeline-v1-review/api/SchemePipeline.Tests)) using real MongoDB instances via Testcontainers ([`MongoFixture.cs`](file:///C:/Projects/scheme-pipeline-v1-review/api/SchemePipeline.Tests/MongoFixture.cs)), plus 19 passing Vitest unit tests for the frontend.
+* **Strict Boundary Validation:** Zod schemas in [api.ts](file:///C:/Projects/scheme-pipeline-v1-review/web/src/api.ts#L6-L37) validate server response shapes at runtime, and RFC 7807 `ProblemDetails` / `ValidationProblem` are used consistently for error contracts.
+* **Accessibility Considerations:** The table implements `aria-sort`, accessible tenure breakdown descriptions via `role="img"`, and responsive column collapsing.
+
+---
+
+## 1. Critical & High-Priority Issues
+
+### 1.1 Startup Crash on Database Boot Race Condition
+* **File:** [Program.cs](file:///C:/Projects/scheme-pipeline-v1-review/api/SchemePipeline.Api/Program.cs#L27-L45)
+* **Issue:** 
+  In [Program.cs:27](file:///C:/Projects/scheme-pipeline-v1-review/api/SchemePipeline.Api/Program.cs#L27):
+  ```csharp
+  await app.Services.GetRequiredService<SchemeStore>().EnsureIndexesAsync();
+  app.MapSchemeEndpoints();
+  app.MapGet("/health", ...);
+  app.Run();
+  ```
+  `EnsureIndexesAsync()` is awaited **before** `app.Run()`. If MongoDB is slow to boot (or down), index creation blocks for the driver's default 30-second server selection timeout and throws an unhandled exception, terminating the API process. Because `app.Run()` is never reached, the `/health` endpoint never starts listening. The `/health` route was given a 2-second timeout specifically to report 503 quickly, but it cannot function if the process crashes during startup.
+* **Impact:** [start.bat](file:///C:/Projects/scheme-pipeline-v1-review/start.bat#L13-L25) starts MongoDB and immediately spawns `dotnet run`. If Mongo takes 2–3 seconds to initialize sockets, the API crashes.
+* **Recommendation:** Move index initialization into an `IHostedService` / `BackgroundService`, or initialize indexes lazily/resiliently on readiness check.
+
+---
+
+### 1.2 Unpaginated Full-Collection Scans & Memory Pressure (DoS Risk)
+* **Files:** [SchemeEndpoints.cs](file:///C:/Projects/scheme-pipeline-v1-review/api/SchemePipeline.Api/Http/SchemeEndpoints.cs#L39-L41), [SchemeEndpoints.cs](file:///C:/Projects/scheme-pipeline-v1-review/api/SchemePipeline.Api/Http/SchemeEndpoints.cs#L68-L69), [SchemeStore.cs](file:///C:/Projects/scheme-pipeline-v1-review/api/SchemePipeline.Api/Data/SchemeStore.cs#L34-L40)
+* **Issue:** 
+  1. `GET /api/schemes`: [store.ListAsync(statusFilter, ct)](file:///C:/Projects/scheme-pipeline-v1-review/api/SchemePipeline.Api/Data/SchemeStore.cs#L34) performs an unpaginated query returning **every** document matching the status filter. Sorting is then executed **entirely in memory** via LINQ ([`SchemeSorting.Sort`](file:///C:/Projects/scheme-pipeline-v1-review/api/SchemePipeline.Api/Domain/SchemeSorting.cs#L7)), which computes totals per scheme during sorting and again when mapping responses.
+  2. `GET /api/summary`: Pulls all scheme records across the entire database over the network to compute portfolio totals in memory in C# rather than leveraging a MongoDB aggregation pipeline (`$unwind` / `$group`).
+* **Impact:** As the portfolio grows, this leads to large memory allocations, garbage collection pauses, and potential API starvation / denial-of-service.
+* **Recommendation:** Introduce pagination parameters (`page`, `pageSize` or cursor-based) on `GET /api/schemes`. Push sorting and summary aggregation down to MongoDB:
+  ```csharp
+  // For summary: use MongoDB aggregate pipeline
+  var summary = await _schemes.Aggregate()
+      .Unwind<Scheme, UnwoundScheme>(s => s.Tenures)
+      ...
+  ```
+
+---
+
+### 1.3 Missing Concurrency Control on Scheme Updates (Data Overwrite Risk)
+* **File:** [SchemeStore.cs](file:///C:/Projects/scheme-pipeline-v1-review/api/SchemePipeline.Api/Data/SchemeStore.cs#L54-L64)
+* **Issue:** 
+  In [`UpdateAsync`](file:///C:/Projects/scheme-pipeline-v1-review/api/SchemePipeline.Api/Data/SchemeStore.cs#L54):
+  ```csharp
+  public async Task<Scheme?> UpdateAsync(Guid id, Scheme changes, CancellationToken ct = default)
+  {
+      var update = Builders<Scheme>.Update
+          .Set(s => s.Name, changes.Name)
+          .Set(s => s.SiteAddress, changes.SiteAddress)
+          .Set(s => s.Status, changes.Status)
+          .Set(s => s.Tenures, changes.Tenures)
+          .Set(s => s.UpdatedAt, Now());
+      ...
+      return await _schemes.FindOneAndUpdateAsync<Scheme>(s => s.Id == id, update, options, ct);
+  }
+  ```
+  There is no optimistic locking (e.g., checking `UpdatedAt == expectedUpdatedAt`, or an `ETag` / `version` field). If User A and User B open the same scheme simultaneously, the last write silently overwrites the previous edits with no conflict detection.
+* **Recommendation:** Include `If-Match` / `concurrencyToken` (or pass `UpdatedAt` in the filter `s => s.Id == id && s.UpdatedAt == expectedUpdatedAt`) and return `409 Conflict` if the document was modified by another user.
+
+---
+
+### 1.4 Broken Playwright E2E Setup & Hardcoded Docker Project Name
+* **Files:** [reset-database.ts](file:///C:/Projects/scheme-pipeline-v1-review/web/e2e/reset-database.ts#L5-L8), [playwright.config.ts](file:///C:/Projects/scheme-pipeline-v1-review/web/playwright.config.ts#L11)
+* **Issue:**
+  1. In [reset-database.ts:5](file:///C:/Projects/scheme-pipeline-v1-review/web/e2e/reset-database.ts#L5):
+     ```ts
+     execSync('docker compose exec -T mongo mongosh scheme_pipeline_e2e --quiet --eval "db.dropDatabase()"', { cwd: '..' })
+     ```
+     `docker compose exec` checks for a container named `<project>-mongo-1`. Because [docker-compose.yml](file:///C:/Projects/scheme-pipeline-v1-review/docker-compose.yml) lacks an explicit top-level `name:`, Docker Compose uses the enclosing folder name as the project name. If the folder is named `scheme-pipeline-v1-review` while the container was created under `scheme-pipeline`, this command fails with `service "mongo" is not running`.
+  2. [playwright.config.ts:11](file:///C:/Projects/scheme-pipeline-v1-review/web/playwright.config.ts#L11) sets `channel: 'chrome'`. In headless CI environments (Linux GitHub Actions agents) where Google Chrome is not installed, Playwright will fail to start.
+* **Recommendation:** 
+  - Add `name: scheme-pipeline` to [docker-compose.yml](file:///C:/Projects/scheme-pipeline-v1-review/docker-compose.yml).
+  - Reset the test database via standard MongoDB connection (or an internal API reset endpoint for testing) rather than executing `docker compose exec mongosh` via shell.
+  - In [playwright.config.ts](file:///C:/Projects/scheme-pipeline-v1-review/web/playwright.config.ts), use standard bundled Chromium devices (`devices['Desktop Chrome']`) instead of requiring the host's installed Google Chrome channel.
+
+---
+
+## 2. Medium-Priority & Domain / UX Issues
+
+### 2.1 Conflicting "Not Valued" Caution Notice between Table and Summary
+* **Files:** [Summary.tsx](file:///C:/Projects/scheme-pipeline-v1-review/web/src/Summary.tsx#L22-L24), [SchemeTable.tsx](file:///C:/Projects/scheme-pipeline-v1-review/web/src/SchemeTable.tsx#L68-L70), [format.ts](file:///C:/Projects/scheme-pipeline-v1-review/web/src/format.ts#L29-L33)
+* **Issue:**
+  In [`SchemeTable.tsx`](file:///C:/Projects/scheme-pipeline-v1-review/web/src/SchemeTable.tsx#L68):
+  ```tsx
+  {scheme.totals.unvaluedHomes > 0 && scheme.totals.unvaluedHomes < scheme.totals.homes && (
+    <span className="caution">{count(scheme.totals.unvaluedHomes)} unvalued</span>
+  )}
+  ```
+  The caution text is only shown when **some** homes are valued. If all homes are unvalued, the cell simply renders `"Not valued"`.
+  However, in [`Summary.tsx`](file:///C:/Projects/scheme-pipeline-v1-review/web/src/Summary.tsx#L22):
+  ```tsx
+  {value(totals)}
+  {totals.unvaluedHomes > 0 && (
+    <span className="caution">excludes {count(totals.unvaluedHomes)} unvalued homes</span>
+  )}
+  ```
+  If all homes in the portfolio are unvalued, `value(totals)` displays `"Not valued"` and immediately below it displays `"excludes X unvalued homes"`. This is contradictory (the valuation does not exclude unvalued homes; there is no valuation at all).
+* **Fix:** Align [Summary.tsx](file:///C:/Projects/scheme-pipeline-v1-review/web/src/Summary.tsx#L22) with `SchemeTable.tsx`:
+  ```tsx
+  {totals.unvaluedHomes > 0 && totals.unvaluedHomes < totals.homes && (
+    <span className="caution">excludes {count(totals.unvaluedHomes)} unvalued homes</span>
+  )}
+  ```
+
+---
+
+### 2.2 Inefficient Re-fetching & Coupled Failure in `App.tsx`
+* **File:** [App.tsx](file:///C:/Projects/scheme-pipeline-v1-review/web/src/App.tsx#L19-L32)
+* **Issue:**
+  In `App.tsx`:
+  ```tsx
+  useEffect(() => {
+    const controller = new AbortController()
+    Promise.all([api.list(status, sort.key, sort.desc, controller.signal), api.summary(controller.signal)])
+      .then(([list, summary]) => { ... })
+      .catch(() => { ... })
+    return () => controller.abort()
+  }, [status, sort, reloads])
+  ```
+  1. The portfolio summary is independent of table sorting and status filtering, yet every time a user clicks a table header to sort or changes the status filter, `api.summary()` is re-requested from the server.
+  2. Because of `Promise.all`, if `api.summary` fails or times out, the table also crashes with `"Couldn't load schemes."` even if `api.list` succeeded.
+* **Fix:** Split summary loading into its own `useEffect` (triggered on mount and `reloads`), or use `Promise.allSettled`.
+
+---
+
+### 2.3 Form Input Edge Case with `Infinity` & Misleading Error Message
+* **Files:** [SchemeForm.tsx](file:///C:/Projects/scheme-pipeline-v1-review/web/src/SchemeForm.tsx#L38-L54), [api.ts](file:///C:/Projects/scheme-pipeline-v1-review/web/src/api.ts#L65-L76)
+* **Issue:**
+  In `readNumber`:
+  ```ts
+  function readNumber(text: string) {
+    const cleaned = text.replaceAll(',', '').trim()
+    return cleaned === '' ? null : Number(cleaned)
+  }
+  ```
+  If a user inputs `"Infinity"`, `Number("Infinity")` returns `Infinity`. Because `Number.isNaN(Infinity)` is **`false`**, `unreadableNumbers` does not flag it.
+  When serialized via `JSON.stringify`, `Infinity` becomes `null` (`{"homes": null}`).
+  The API's `TenureLineRequest` expects a non-nullable `decimal Homes`. ASP.NET Core fails JSON binding with a `BadHttpRequestException`.
+  Because `BadHttpRequestException` does not return a RFC `ValidationProblem` body with field errors, `api.ts` cannot parse a validation error and throws a generic HTTP 400 error. The form displays:
+  > *"Couldn't save the scheme. Check the API is running, then try again."*
+* **Fix:** Use `Number.isFinite(n)` instead of `!Number.isNaN(n)` in `unreadableNumbers`.
+
+---
+
+### 2.4 Lack of Focus Trap & Focus Restoration in Side Panel Drawer
+* **File:** [SchemeForm.tsx](file:///C:/Projects/scheme-pipeline-v1-review/web/src/SchemeForm.tsx#L108-L121)
+* **Issue:**
+  1. **Focus Trap:** When the panel opens, `autoFocus` focuses the Name input, but a keyboard/screen-reader user can Tab straight out of the drawer into the underlying table and header.
+  2. **Focus Return:** When the form is cancelled or saved (`setEditing(null)`), focus is lost and resets to `document.body`, forcing keyboard navigation to start over from the top of the page.
+  3. **Escape Key Handling:** `onKeyDown={(e) => e.key === 'Escape' && onCancel()}` is placed on `<aside>`. If focus moves outside the drawer, Escape no longer closes the panel.
+* **Fix:** Implement standard modal/dialog semantics (`role="dialog"`, `aria-modal="true"`), trap focus within the panel, listen for Escape on `window`, and restore focus to the triggering element upon dismissal.
+
+---
+
+### 2.5 Form Errors Are Not Cleared While Typing
+* **File:** [SchemeForm.tsx](file:///C:/Projects/scheme-pipeline-v1-review/web/src/SchemeForm.tsx#L86-L88)
+* **Issue:** When the server returns validation errors (e.g. `Name is required`), the error banner and `aria-invalid="true"` remain stuck on the input as the user types, until they submit the form again.
+* **Fix:** Clear the field's error in `setName`, `setSiteAddress`, and `setRow` when the user edits the field.
+
+---
+
+### 2.6 Missing Currency Scale/Precision Check
+* **File:** [SchemeValidator.cs](file:///C:/Projects/scheme-pipeline-v1-review/api/SchemePipeline.Api/Http/SchemeValidator.cs#L45-L46)
+* **Issue:** 
+  ```csharp
+  if (line.AverageValue is <= 0 or > MaxAverageValue)
+      errors.TryAdd($"{key}.averageValue", "Average value, if given, must be more than 0 and at most 100,000,000.");
+  ```
+  The validator restricts values between 0 and 100,000,000, but does not validate decimal scale (allowed decimal places). A client can submit fractional sub-pence values like `120000.456789`, which are multiplied by home counts and stored in MongoDB.
+* **Fix:** Check `decimal.Round(val, 2) == val` (or check for at most 2 decimal places).
+
+---
+
+## 3. DevOps, Build & Minor Code Quality Findings
+
+| Area | Location | Issue | Recommendation |
+| :--- | :--- | :--- | :--- |
+| **CORS** | [Program.cs](file:///C:/Projects/scheme-pipeline-v1-review/api/SchemePipeline.Api/Program.cs) | No CORS policy configured. In dev, Vite proxies `/api`. In standalone deployments or preview mode, cross-origin requests fail. | Add `builder.Services.AddCors()` and configure allowed origins for staging/prod. |
+| **TypeScript Config** | [tsconfig.json](file:///C:/Projects/scheme-pipeline-v1-review/web/tsconfig.json) | Neither `tsconfig.app.json` nor `tsconfig.node.json` includes `playwright.config.ts` or `e2e/*`. `tsc -b` never type-checks E2E code. | Add a `tsconfig.e2e.json` or add `e2e` and `playwright.config.ts` to `tsconfig.node.json`. |
+| **`start.bat` Health Check** | [start.bat:38](file:///C:/Projects/scheme-pipeline-v1-review/start.bat#L38) | `curl -s -o nul http://localhost:5080/health \|\| goto wait` lacks `-f`. Curl returns exit code 0 on HTTP 503, so `start.bat` falsely considers a failing API as healthy. | Change to `curl -s -f -o nul http://localhost:5080/health \|\| goto wait`. |
+| **Cross-Platform Scripting** | Repo Root | Only Windows `start.bat` is provided; macOS/Linux developers have no local setup script. | Add a companion `start.sh` or npm/task runner script. |
+| **Dockerization** | [docker-compose.yml](file:///C:/Projects/scheme-pipeline-v1-review/docker-compose.yml) | Docker compose only specifies Mongo. There are no Dockerfiles for the API or Web app. | Provide multi-stage Dockerfiles for both services. |
+| **Persistent Notification** | [App.tsx:77-79](file:///C:/Projects/scheme-pipeline-v1-review/web/src/App.tsx#L77-L79) | `"Scheme saved."` notice never auto-clears. It remains indefinitely until another scheme is edited. | Add a timeout (e.g. 4 seconds) to clear `notice`. |
+| **Scheme Deletion** | [SchemeEndpoints.cs](file:///C:/Projects/scheme-pipeline-v1-review/api/SchemePipeline.Api/Http/SchemeEndpoints.cs) | No `DELETE /api/schemes/{id}` endpoint or archive functionality exists. Erroneous records cannot be removed. | Add `DELETE` endpoint with proper authorization and soft-delete/hard-delete support. |
+
+---
+
+### Summary Checklist for Next Steps
+1. **Fix `Program.cs` index bootstrap** to avoid crashing on database startup.
+2. **Synchronize `Summary.tsx` unvalued logic** with `SchemeTable.tsx`.
+3. **Decouple `api.summary` from table sort/filter** in `App.tsx`.
+4. **Fix Playwright e2e runner** (`docker compose` project name and Chromium channel).
+5. **Add optimistic concurrency** (`ETag` / `UpdatedAt`) to updates.

@@ -1,0 +1,9 @@
+Codex (GPT 6.1-sol, high effort), vague prompt v1, on the clean clone at c514c4d (2026-11-04)
+Output pasted from the Codex session, verbatim.
+
+Found two actionable issues:
+
+1. [P2] A completed save can discard another form’s unsaved changes. In App.tsx:47 (/C:/Projects/scheme-pipeline-v1-review/web/src/App.tsx:47), every successful save unconditionally closes the current panel. On a slow connection, save scheme A, cancel, then open scheme B and start editing. When A’s request finishes, B’s panel closes and its edits disappear. Track which form initiated the request and close only that form, or prevent switching while saving.
+2. [P2] Nonfinite amounts silently become “not valued.” In SchemeForm.tsx:51 (/C:/Projects/scheme-pipeline-v1-review/web/src/SchemeForm.tsx:51), validation checks only Number.isNaN. Inputs such as Infinity or 1e309 pass, but JSON serialization converts them to null. The API accepts that as an unknown value, so saving can silently erase an existing valuation. Reject nonblank numbers unless Number.isFinite returns true.
+
+Validation: all 75 backend tests and 19 frontend tests passed; frontend build and lint passed. Browser end-to-end tests weren’t run. No source files changed.

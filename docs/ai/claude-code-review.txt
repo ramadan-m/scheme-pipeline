@@ -1,0 +1,13 @@
+Claude Code /code-review (high effort), 2026-11-04
+Scope it actually reviewed: the 7 unpushed commits on main (the Phase 4 fixes), not the whole project.
+
+1. web/src/App.tsx:113 - Save lock removes the only escape from an in-flight save: Cancel disabled, Escape/onCancel no-op, no abort or timeout. If the API hangs, the panel and all edit buttons stay locked.
+2. web/src/SchemeForm.tsx:47 - isFinite only catches Infinity. Finite values above decimal max (~7.9e28, e.g. 1e30) still fail JSON binding -> 400 with no field errors -> form shows "Check the API is running".
+3. api/.../Data/IndexInitializer.cs:25 - Every exception treated as transient: retries forever, no backoff, full stack trace at Warning every ~10s.
+4. api/.../Data/IndexInitializer.cs:10 - 5s per-attempt cap also cancels a createIndexes that is merely slow; a slow build is cancelled and resent repeatedly. Cap server selection instead.
+5. web/src/SchemeForm.tsx:42 - Number() accepts hex/binary/octal/exponent ('0x10' -> 16, '1e5' -> 100000) silently, contradicting the comment.
+6. api/SchemePipeline.Tests/ApiTests.cs:27 - Background createIndexes now races the test's first insert on a fresh DB; both create the collection implicitly -> possible NamespaceExists/WriteConflict -> flaky 500.
+7. docker-compose.yml:2 - Fixed project name orphans the container/volume of anyone whose clone folder had another name; old container still holds 27017.
+8. web/src/Summary.tsx:23 - "All homes unvalued" rule duplicated outside format.ts value(); the two can drift.
+9. web/src/SchemeTable.tsx:54 - Disabled row-name buttons have no :disabled style; hover still looks like a link.
+10. web/src/SchemeForm.tsx:100 - Local `const unreadable` shadows the new module-level unreadable() helper.

@@ -1,0 +1,98 @@
+Ran list files in scheme-pipeline
+Ran list source files
+Analyzed ai-log.md:L1-43
+Analyzed review-prompt-v2.md:L1-45
+Analyzed ai-examples-raw.md:L1-58
+Ran run dotnet test · Exited with code 1
+Ran run dotnet test on test project · Exited with code 1
+Analyzed SchemePipeline.slnx:L1-6
+Analyzed SchemePipeline.Tests.csproj:L1-26
+Ran check Tests bin directory
+Ran run dotnet test with no-build · Exited with code 1
+Analyzed Scheme.cs:L1-27
+Analyzed SchemeMaths.cs:L1-24
+Analyzed SchemeSorting.cs:L1-22
+Analyzed Contracts.cs:L1-16
+Analyzed SchemeValidator.cs:L1-83
+Analyzed SchemeEndpoints.cs:L1-73
+Checked task Run dotnet test with no-build
+Analyzed MongoFixture.cs:L1-30
+Analyzed SchemeStore.cs:L1-72
+Analyzed Program.cs:L1-47
+Analyzed appsettings.json:L1-12
+Analyzed schemes.http:L1-74
+Analyzed start.bat:L1-42
+Analyzed SchemeMathsTests.cs:L1-158
+Analyzed SchemeSortingTests.cs:L1-65
+Analyzed SchemeValidatorTests.cs:L1-148
+Analyzed SchemeStoreTests.cs:L1-100
+Analyzed ApiTests.cs:L1-257
+Analyzed package.json:L1-37
+Ran run web vitest tests
+Ran find node executable · Exited with code 1
+Analyzed api.ts:L1-90
+Analyzed format.ts:L1-33
+Analyzed Summary.tsx:L1-30
+Analyzed SchemeTable.tsx:L1-81
+Analyzed SchemeForm.tsx:L1-200
+Analyzed App.tsx:L1-109
+Analyzed TenureBar.tsx:L1-43
+Analyzed api.test.ts:L1-39
+Analyzed format.test.ts:L1-46
+Analyzed SchemeForm.test.tsx:L1-97
+Analyzed TenureBar.test.tsx:L1-49
+Analyzed journey.e2e.ts:L1-63
+Analyzed reset-database.ts:L1-9
+Analyzed playwright.config.ts:L1-25
+Analyzed vite.config.ts:L1-16
+Analyzed docker-compose.yml:L1-10
+Analyzed launchSettings.json:L1-12
+Analyzed SchemePipeline.Api.csproj:L1-13
+Analyzed global.json:L1-6
+Analyzed styles.css:L1-401
+Ran search for delete in repo · Exited with code 1
+Ran search for delete in source files
+Analyzed index.html:L1-12
+Analyzed main.tsx:L1-12
+
+### Verdict
+
+This is an exceptionally disciplined, high-calibre take-home project: the domain maths are rigorously tested with explicit financial rounding rules (`MidpointRounding.AwayFromZero`), the C# Minimal API and React front end communicate via well-aligned contracts guarded by Zod, and security fundamentals for a localhost tool (typed MongoDB builders, mass-assignment guards, strict JSON deserialization) are solid. The main defects are a UI copy inconsistency in the portfolio summary when schemes are unvalued, an unhandled HTTP 500 when an API request body is `null`, an omitted `DELETE` capability that was part of the original problem statement, and a false sense of security in the 500 error test caused by `WebApplicationFactory` defaulting to Production.
+
+---
+
+### Findings (Sections 1–5)
+
+| # | Severity | Confidence | File:line | Problem | How to reproduce (exact input/steps) | Expected vs actual | Suggested fix | Test that would catch it |
+|---|---|---|---|---|---|---|---|---|
+| 1 | Medium | High | [SchemeValidator.cs:16](file:///C:/Projects/scheme-pipeline/api/SchemePipeline.Api/Http/SchemeValidator.cs#L16) | `NullReferenceException` (HTTP 500) when request body is `null` | Send `POST /api/schemes` with header `Content-Type: application/json` and raw body `null`. | Expected: HTTP 400 Bad Request with ProblemDetails validation error. Actual: HTTP 500 Internal Server Error (`request.Name` dereferences null). | Add `if (request is null) return (null, new() { [""] = ["A request body is required."] });` at the beginning of `SchemeValidator.Validate`. | `[Fact] public async Task Null_body_returns_400_not_500() { var res = await _client.PostAsJsonAsync<object?>("/api/schemes", null); Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode); }` |
+| 2 | Medium | High | [Summary.tsx:22](file:///C:/Projects/scheme-pipeline/web/src/Summary.tsx#L22) | Portfolio summary renders contradictory `"Not valued excludes N unvalued homes"` when all homes are unvalued | Add a single scheme with 20 Social Rent homes and average value left blank (`null`). View the Portfolio Summary banner. | Expected: "Total value: Not valued" without the exclusion note (matching [SchemeTable.tsx:68](file:///C:/Projects/scheme-pipeline/web/src/SchemeTable.tsx#L68)). Actual: Renders "Not valued" alongside `<span className="caution">excludes 20 unvalued homes</span>`. | Change line 22 to `{totals.unvaluedHomes > 0 && totals.unvaluedHomes < totals.homes && (` matching `SchemeTable.tsx`. | Component test for `<Summary totals={{ homes: 20, affordableHomes: 20, affordablePercent: 100, value: 0, unvaluedHomes: 20 }} />` asserting `"excludes"` is not rendered. |
+| 3 | Medium | High | [SchemeEndpoints.cs:11-15](file:///C:/Projects/scheme-pipeline/api/SchemePipeline.Api/Http/SchemeEndpoints.cs#L11-L15) | Complete omission of `DELETE` endpoint and UI action despite specification requirements | Send `DELETE /api/schemes/{guid}` or attempt to delete a scheme in the UI. | Expected: HTTP 200/204 with scheme deleted from MongoDB and removed from the list. Actual: HTTP 405 Method Not Allowed; no UI deletion button or store method exists. | Map `schemes.MapDelete("/{id:guid}", Delete)` in `SchemeEndpoints.cs`, add `DeleteAsync(id)` in [SchemeStore.cs](file:///C:/Projects/scheme-pipeline/api/SchemePipeline.Api/Data/SchemeStore.cs), and expose a Delete button in [SchemeTable.tsx](file:///C:/Projects/scheme-pipeline/web/src/SchemeTable.tsx). | Integration test: `Delete_existing_scheme_returns_204_and_removes_from_list`. |
+| 4 | Medium | High | [ApiTests.cs:230-249](file:///C:/Projects/scheme-pipeline/api/SchemePipeline.Tests/ApiTests.cs#L230-L249) | 500 error sanitization test runs in Production by default, masking information leakage in Development | In `ApiTests.cs`, configure `_factory` with `.UseEnvironment("Development")` (matching `launchSettings.json` used by `dotnet run`) and run `Unexpected_error_returns_500_problem_details_without_internals`. | Expected: In Development, `AddProblemDetails()` attaches `"exception"` with stack traces, causing `Assert.DoesNotContain("Exception", body)` to fail. Actual: Test only passed because `WebApplicationFactory` runs in Production, giving false verification that internals are hidden in dev. | Customize `ProblemDetailsOptions` in [Program.cs:15](file:///C:/Projects/scheme-pipeline/api/SchemePipeline.Api/Program.cs#L15) to strip exception details across all environments, or test both environments explicitly. | Mutation: Run `ApiTests` with `.WithWebHostBuilder(b => b.UseEnvironment("Development"))`. |
+| 5 | Low | High | [SchemeSorting.cs:10-11](file:///C:/Projects/scheme-pipeline/api/SchemePipeline.Api/Domain/SchemeSorting.cs#L10-L11) | Untested sorting keys: `SchemeSort.Homes` and `SchemeSort.Name` | Mutate line 11 to `SchemeSort.Homes => Order(schemes, s => 0, descending)` or line 10 to `s => ""`. Run all tests. | Expected: Unit test fails on broken Homes or Name ordering. Actual: 100% of tests pass; neither column's sort logic is covered in [SchemeSortingTests.cs](file:///C:/Projects/scheme-pipeline/api/SchemePipeline.Tests/SchemeSortingTests.cs) or [ApiTests.cs](file:///C:/Projects/scheme-pipeline/api/SchemePipeline.Tests/ApiTests.cs). | Add unit tests in `SchemeSortingTests.cs` for `Sort(..., SchemeSort.Homes, ...)` and `Sort(..., SchemeSort.Name, ...)`. | `[Fact] public void Homes_sort_orders_by_total_homes()` |
+| 6 | Low | High | [SchemeStore.cs:30-32](file:///C:/Projects/scheme-pipeline/api/SchemePipeline.Api/Data/SchemeStore.cs#L30-L32) | `EnsureIndexesAsync` is never invoked or asserted in tests | Remove the body of `EnsureIndexesAsync` (`return Task.CompletedTask;`) and run `SchemeStoreTests`. | Expected: Test asserts index existence and fails. Actual: All tests pass; `SchemeStoreTests` never invokes `EnsureIndexesAsync()`. | Add a test in [SchemeStoreTests.cs](file:///C:/Projects/scheme-pipeline/api/SchemePipeline.Tests/SchemeStoreTests.cs) that calls `EnsureIndexesAsync()` and inspects `_schemes.Indexes.ListAsync()`. | `[Fact] public async Task EnsureIndexes_creates_status_index()` |
+| 7 | Low | High | [Program.cs:40-44](file:///C:/Projects/scheme-pipeline/api/SchemePipeline.Api/Program.cs#L40-L44) | Untested `/health` failure mode (503 Service Unavailable) | Mutate line 43 in `Program.cs` to return `Results.Ok()` or `Results.StatusCode(500)` during exceptions. | Expected: Automated test catches non-503 status code when MongoDB is down. Actual: Mutation survives; [ApiTests.cs:250](file:///C:/Projects/scheme-pipeline/api/SchemePipeline.Tests/ApiTests.cs#L250) only tests the healthy path. | Add an integration test with a bogus connection string (`mongodb://127.0.0.1:1/down`) verifying 503 response within 2.5s. | `[Fact] public async Task Health_returns_503_when_database_unreachable()` |
+| 8 | Low | High | [SchemeValidator.cs:8,69](file:///C:/Projects/scheme-pipeline/api/SchemePipeline.Api/Http/SchemeValidator.cs#L8) | Untested `MaxAddressLength` boundary (500 characters) | Change `MaxAddressLength = 500` to `50` or remove the length check in `Required`. | Expected: Validation test catches address length mutation. Actual: All tests pass; [SchemeValidatorTests.cs:72](file:///C:/Projects/scheme-pipeline/api/SchemePipeline.Tests/SchemeValidatorTests.cs#L72) only tests Name length (200/201). | Add `[Theory] [InlineData(500, true)] [InlineData(501, false)] public void Address_length_limit(int length, bool valid)` to `SchemeValidatorTests.cs`. | Mutation: `MaxAddressLength = 50` |
+| 9 | Low | High | [api.ts:23-32](file:///C:/Projects/scheme-pipeline/web/src/api.ts#L23-L32) | `SchemeSchema` is never exercised in frontend unit tests | Change `z.uuid()` or `z.iso.datetime()` in `SchemeSchema` to an invalid schema and run `npm test`. | Expected: Unit test in `api.test.ts` fails. Actual: All tests pass; [api.test.ts:1-39](file:///C:/Projects/scheme-pipeline/web/src/api.test.ts#L1-L39) only tests `api.summary()`, leaving `SchemeSchema` completely uncovered outside e2e. | Add unit tests in `api.test.ts` validating complete `Scheme` fixtures with valid/invalid UUIDs and ISO timestamps. | Mutation: `id: z.number()` in `SchemeSchema` survives `npm test`. |
+
+---
+
+### Design Challenges (Section 6)
+
+| # | Choice | Why you'd do it differently | Trade-off you accept |
+|---|---|---|---|
+| 1 | In-memory sorting and portfolio aggregation ([SchemeEndpoints.cs:40,69](file:///C:/Projects/scheme-pipeline/api/SchemePipeline.Api/Http/SchemeEndpoints.cs#L40)) | Computing totals exclusively in C# requires `ListAsync` and `Summary` to pull all matching (or all) documents across the wire into web server memory. As the collection grows, sorting by Homes or Value evaluates `SchemeMaths.For` repeatedly during `OrderBy`, and `Summary` becomes an $O(N)$ memory transfer. Storing denormalized totals on the document or using a MongoDB aggregation pipeline (`$unwind`, `$group`) would delegate sorting and aggregation to the database. | Calculating on read avoids schema denormalization, transaction/concurrency synchronization, and complex Mongo aggregation queries, keeping `SchemeMaths` as the single pure source of mathematical truth for small datasets. |
+| 2 | Non-nullable `decimal Value` in `Totals` ([SchemeMaths.cs:3,12](file:///C:/Projects/scheme-pipeline/api/SchemePipeline.Api/Domain/SchemeMaths.cs#L3)) | `Totals.Value` defaults to `0m` when all homes are unvalued. This conflates a scheme with zero financial value (e.g. 0 homes) with a 100-home appraisal scheme awaiting initial valuation. In `SchemeSorting.cs:13`, unvalued schemes sort alongside £0 schemes. The front end is forced to reconstruct whether homes are valued by checking `totals.unvaluedHomes === totals.homes`. Making `Value` nullable (`decimal?`) when `unvaluedHomes === homes` would represent the domain state explicitly. | Keeping `Value` as a non-nullable `decimal` simplifies arithmetic sums across schemes without nullable propagation. |
+| 3 | Unbounded index creation blocking API startup ([Program.cs:27](file:///C:/Projects/scheme-pipeline/api/SchemePipeline.Api/Program.cs#L27)) | Calling `await store.EnsureIndexesAsync()` directly in the startup path without a cancellation timeout means that if MongoDB is down when the API launches, the host blocks for the driver's default 30-second server selection timeout and crashes before `app.Run()`. The web server never binds port 5080, preventing `/health` from ever serving the 503 response designed for it. Wrapping index creation in a resilient background task or passing a short timeout allows the server to boot and report health accurately. | Startup index verification guarantees that no HTTP requests hit the database before required indexes are guaranteed to exist. |
+
+---
+
+### What Was Checked and Found to Be Clean
+
+- **Arithmetic & precision:** Decimal arithmetic is preserved end-to-end; `MidpointRounding.AwayFromZero` is verified for financial rounding; pence are retained in totals without floating-point drift.
+- **Pipeline sorting:** Status enum pipeline ordering (`Appraisal -> Planning -> OnSite -> Complete`) is stable and correctly tie-broken by Name ascending even under descending status sorts.
+- **Over-posting & mass assignment:** Contracts strictly separate input (`SchemeRequest`) from persistence (`Scheme`). Client-supplied IDs, creation dates, or extra JSON fields cannot override server-generated version 7 Guids or timestamps.
+- **MongoDB query safety:** All queries use strongly-typed builders (`Builders<Scheme>.Filter.Eq`, LINQ expressions); no raw BSON string interpolation exists.
+- **Concurrency & timestamps:** MongoDB updates use atomic `$set` with `FindOneAndUpdate` and `ReturnDocument.After`, ensuring `CreatedAt` remains untouched while `UpdatedAt` advances monotonically.
+- **Input boundary sanitization:** Input values undergo strict verification (name/address length limits, integer home checks using `decimal.Truncate`, bounds up to 100,000 homes / £100m value, and duplicate tenure line detection).
+- **Accessibility & mobile UX:** WAI-ARIA tables use proper `aria-sort`, forms use `aria-invalid` linked to error messages via `aria-describedby`, screen-reader announcements on `<TenureBar>` are clean, and responsive CSS properly toggles the inline tenure bar without double-reading.

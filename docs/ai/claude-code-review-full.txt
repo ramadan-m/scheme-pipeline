@@ -1,0 +1,115 @@
+Claude Code review: whole repo (high effort)
+Date: 2026-11-04
+Scope: all 61 tracked files at commit c514c4d (no pending diff)
+Status: findings NOT verified against the running app; treat as likely issues to confirm.
+CLAUDE.md compliance: nothing to flag (no repo-level CLAUDE.md).
+
+==============================================================================
+CORRECTNESS
+==============================================================================
+
+1. web/src/SchemeForm.tsx:41
+   Summary: readNumber returns Infinity for text like '1e999' or 'Infinity'
+   (not NaN, so the unreadable check passes), and JSON.stringify turns
+   Infinity into null, so a typed average value is silently saved as
+   'not valued'.
+   Failure scenario: User types 'Infinity' or '1e400' in 'Market sale
+   average value' and saves. The request body has averageValue: null, the
+   API accepts it, and the scheme shows 'Not valued' / 'N unvalued' with no
+   error. The same input in Homes sends homes: null, which fails JSON
+   binding with a generic 400. Number() also accepts '0x1A' (26) and '0b11'
+   (3) without complaint.
+
+2. web/src/SchemeForm.tsx:102
+   Summary: Any 400 without an `errors` dictionary (a JSON binding failure,
+   such as a decimal overflow) falls through api.ts request() as a plain
+   Error, and the form tells the user the API is down.
+   Failure scenario: Homes = '1e30' is readable as a number, so the client
+   check passes. The API can't bind 1e+30 to decimal, and the exception
+   handler returns a 400 ProblemDetails with no errors. The user sees
+   "Couldn't save the scheme. Check the API is running" while the API is
+   healthy, and gets no field error.
+
+3. api/SchemePipeline.Api/Data/SchemeStore.cs:54
+   Summary: UpdateAsync overwrites every editable field with no version or
+   UpdatedAt check, so two edits that overlap silently lose one of them.
+   Failure scenario: User A opens Riverside and changes the status. User B
+   opens it, changes the tenures, and saves. A saves afterwards with the
+   tenures it loaded earlier, and B's tenure changes are erased with no
+   conflict reported (no 409, no If-Match).
+
+4. web/src/App.tsx:47
+   Summary: save() calls setEditing(null) when the request finishes,
+   whichever panel is open by then, so a slow save that finishes after
+   Cancel or Escape closes a different form the user has since opened.
+   Failure scenario: User saves scheme A, presses Escape while it says
+   'Saving...', and opens scheme B to edit it. A's PUT then resolves,
+   setEditing(null) unmounts B's form, and B's unsaved typing is lost.
+
+5. web/src/Summary.tsx:22
+   Summary: The summary shows the 'excludes N unvalued homes' caution even
+   when every home is unvalued. The table guards this case with `< homes`;
+   the summary does not.
+   Failure scenario: The portfolio has only one scheme, with 20 unvalued
+   social rent homes. The summary shows 'Not valued' followed by 'excludes
+   20 unvalued homes', which contradicts itself. SchemeTable hides the
+   caution in the same case.
+
+6. api/SchemePipeline.Api/Domain/SchemeMaths.cs:10
+   Summary: Portfolio totals use checked int Sum over every tenure line, so
+   a large but valid portfolio throws OverflowException and /api/summary
+   returns 500.
+   Failure scenario: The validator allows 100,000 homes per line and 4
+   lines per scheme. About 5,400 maxed schemes push the homes total past
+   int.MaxValue, so Enumerable.Sum throws, the summary returns 500, and the
+   whole page shows "Couldn't load schemes" (App loads the list and summary
+   together with Promise.all).
+
+==============================================================================
+END-TO-END TESTS
+==============================================================================
+
+7. web/e2e/reset-database.ts:7
+   Summary: cwd '..' is resolved against process.cwd(), not the config
+   file's folder, so the reset only works when Playwright is launched from
+   web/.
+   Failure scenario: Running `npx playwright test -c web/playwright.config.ts`
+   from the repo root makes docker compose run in the repo's parent folder.
+   It finds no compose file, globalSetup throws, and the e2e run fails.
+   Using path.resolve(import.meta.dirname, '../..') would fix it.
+
+8. web/playwright.config.ts:10
+   Summary: Playwright starts webServer before globalSetup, so the API calls
+   EnsureIndexesAsync on scheme_pipeline_e2e and the reset then drops that
+   database, index included. The e2e tests run against a collection with no
+   status index, unlike dev and prod.
+   Failure scenario: API startup creates the {status: 1} index, then
+   reset-database runs dropDatabase. Inserts recreate the collection
+   without the index, so the e2e run silently differs from the production
+   setup, and an index-dependent regression would go unnoticed.
+
+==============================================================================
+EFFICIENCY AND CLEANUP
+==============================================================================
+
+9. web/src/App.tsx:22
+   Summary: Every sort-header click or filter change also refetches
+   /api/summary, which reads the whole collection, although the portfolio
+   totals don't depend on sort or filter.
+   Failure scenario: Clicking 'Value' twice to sort descending makes 4 full
+   collection scans on the server (2 lists + 2 summaries), where 2 would do.
+   A summary failure also hides the list. Fetching the summary in its own
+   effect keyed on `reloads` would avoid both.
+
+10. api/SchemePipeline.Api/Http/SchemeValidator.cs:20
+   Summary: Lines 20 and 41 inline string.Join(", ", Enum.GetNames<T>())
+   even though OneOf<T>() in the same file (line 82), already used by
+   SchemeEndpoints, does exactly that.
+   Failure scenario: The same enum-list message format is written in three
+   places. A change to the wording in OneOf won't reach the body-validation
+   messages for status and tenure, so query and body errors drift apart.
+
+==============================================================================
+SUGGESTED ORDER
+==============================================================================
+Start with 1, 2 and 4: those are the ones users would run into.

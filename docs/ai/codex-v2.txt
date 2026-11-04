@@ -1,0 +1,28 @@
+﻿Overall verdict
+
+This is a solid, appropriately scoped take-home project: the calculation rules, API validation, and Mongo persistence are handled carefully. I found two concrete UI defects and two specific test weaknesses. I found no additional API contract or localhost security issue worth reporting. This review is based on tracing the source; I did not run tests, install packages, or run Git commands. No project source files were changed.
+
+Findings
+
+| # | Severity | Confidence | File:line | Problem | How to reproduce (exact input/steps) | Expected vs actual | Suggested fix | Test that would catch it |
+|---|---|---|---|---|---|---|---|---|
+| 1 | High | High | web/src/SchemeForm.tsx:51; web/src/api.ts:88 | A non-finite average value silently becomes null, potentially erasing an existing valuation. Number.isNaN() accepts infinity; JSON serialization converts it to null, which the API legitimately accepts as unknown. | Edit a valued scheme. Replace Market sale average value with 1e309 or Infinity, then save. | Expected: field error and existing valuation preserved. Actual: save succeeds with averageValue: null; those homes become unvalued. | Reject any parsed number that is non-null and fails Number.isFinite() before serialization. | Parameterize form tests with Infinity, -Infinity, and 1e309; assert a field error and no save call. |
+| 2 | Medium | High | web/src/App.tsx:47; web/src/SchemeForm.tsx:193 | Completion of an earlier save unconditionally closes whichever form is currently open, discarding a newer draft. Cancel remains available during saving. | Delay a successful save response using browser network throttling. Save scheme A, click Cancel, open Add scheme, and start entering scheme B before A's response arrives. | Expected: A's completion preserves B's form. Actual: setEditing(null) closes B and loses its draft. | Give each editor session a unique identity and close it only if the completed save belongs to the current session. | Render App with a deferred save promise; cancel A, open and fill B, resolve A, and assert B remains open with its inputs. |
+| 3 | Low | High | api/SchemePipeline.Tests/SchemeSortingTests.cs:56 | The affordable-sort test cannot distinguish sorting by percentage from sorting by home count. That mutation would survive the existing tests. | Hypothetical mutation: replace .AffordablePercent with .Homes in the affordable sorting branch. The existing empty-versus-half-affordable example still passes. A distinguishing input is A: 1 social + 1 market home; B: 1 social + 3 market homes. | Expected ascending percentage order: B (25%), A (50%). Mutated implementation returns A, B; existing tests would miss it. Current implementation is correct. | Add examples where home count and percentage imply opposite orders. | Assert ascending B/A and descending A/B for those two schemes. |
+| 4 | Low | High | api/SchemePipeline.Tests/SchemeStoreTests.cs:65; api/SchemePipeline.Tests/ApiTests.cs:172 | Address updates are unprotected by tests. Removing the address assignment from UpdateAsync would survive the existing tests, including the E2E journey. | Hypothetical mutation: remove .Set(s => s.SiteAddress, changes.SiteAddress). Create a scheme at 12 Mill Lane; PUT a valid replacement with address 99 New Road; GET it again. | Expected: response and stored address are 99 New Road. Mutated implementation retains 12 Mill Lane; current tests would miss it. Current implementation is correct. | Change the address in an update test and verify persistence. | Assert the new address in both the PUT response and a subsequent GET. |
+
+Design challenges
+
+| # | Choice | Why you'd do it differently | Trade-off you accept |
+|---|---|---|---|
+| - | No additional challenge justified by this review. | The small API/domain/store split and deliberate validation rules fit the exercise. | No recommendation for extra architectural layers. |
+
+Checked and found sound by inspection
+
+- Decimal value calculations, percentage midpoint rounding, and portfolio weighting.
+- Zero-home handling and the distinction between unknown value and zero.
+- Fractional/oversized home rejection, duplicate tenures, null lines, and enum validation.
+- Pipeline ordering, filtering, and alphabetical tie-breaking.
+- Decimal128 persistence, timestamp precision, and preservation of CreatedAt.
+- C# response shapes against the Zod schemas.
+- Typed Mongo filters, React text rendering, and the same-origin development proxy; no applicable injection, XSS, CORS issue, or embedded credential found in the inspected source.
